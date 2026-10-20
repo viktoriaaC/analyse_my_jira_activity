@@ -26,6 +26,14 @@ def build_intervals(issue: Issue, changes: list[StatusChange], now: datetime) ->
     return [interval for interval in intervals if interval.end > interval.start]
 
 
+def status_at(intervals: list[StatusInterval], moment: datetime) -> str | None:
+    """Return the status at the given moment, or None if no interval covers it."""
+    for interval in intervals:
+        if interval.start <= moment < interval.end:
+            return interval.status
+    return None
+
+
 def clip(intervals: list[StatusInterval], date_range: DateRange) -> list[StatusInterval]:
     """Cut the intervals to the date range and drop the ones that fall outside it."""
     clipped = (

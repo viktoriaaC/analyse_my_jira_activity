@@ -6,6 +6,7 @@ rounded to one decimal.
 """
 
 from collections import defaultdict
+from datetime import datetime
 
 from jira_activity.domain.models import StatusInterval
 
@@ -36,6 +37,16 @@ def tickets_per_status(intervals_by_issue: IntervalsByIssue) -> dict[str, list[s
         for interval in intervals:
             keys_by_status[interval.status].add(key)
     return {status: sorted(keys) for status, keys in keys_by_status.items()}
+
+
+def status_order(intervals_by_issue: IntervalsByIssue) -> list[str]:
+    """Return statuses in the order they first appear, which usually follows the workflow."""
+    first_seen: dict[str, datetime] = {}
+    for intervals in intervals_by_issue.values():
+        for interval in intervals:
+            if interval.status not in first_seen or interval.start < first_seen[interval.status]:
+                first_seen[interval.status] = interval.start
+    return sorted(first_seen, key=lambda status: (first_seen[status], status))
 
 
 def _sum_hours_by_status(intervals: list[StatusInterval]) -> dict[str, float]:

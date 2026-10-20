@@ -1,7 +1,12 @@
 import pytest
 
 from helpers import at, change, date_range, interval, issue
-from jira_activity.domain.aggregate import hours_per_ticket_status, tickets_per_status, time_per_status
+from jira_activity.domain.aggregate import (
+    hours_per_ticket_status,
+    status_order,
+    tickets_per_status,
+    time_per_status,
+)
 from jira_activity.domain.timeline import build_intervals, clip
 
 
@@ -71,3 +76,16 @@ def test_tickets_per_status_lists_each_ticket_once_sorted():
         "To Do": ["ABC-1", "ABC-2"],
         "Done": ["ABC-1"],
     }
+
+
+def test_status_order_follows_first_appearance():
+    intervals_by_issue = {
+        "ABC-1": [interval("Done", at(5), at(6))],
+        "ABC-2": [interval("To Do", at(1), at(2)), interval("In Progress", at(2), at(5))],
+    }
+    assert status_order(intervals_by_issue) == ["To Do", "In Progress", "Done"]
+
+
+def test_status_order_breaks_ties_by_name():
+    intervals_by_issue = {"ABC-1": [interval("Review", at(1), at(2))], "ABC-2": [interval("Blocked", at(1), at(2))]}
+    assert status_order(intervals_by_issue) == ["Blocked", "Review"]

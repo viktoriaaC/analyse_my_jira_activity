@@ -1,5 +1,16 @@
 from helpers import at, change, date_range, interval, issue
-from jira_activity.domain.timeline import build_intervals, clip
+from jira_activity.domain.timeline import build_intervals, clip, status_at
+
+
+def test_status_at_returns_status_covering_moment():
+    intervals = [interval("To Do", at(1), at(2)), interval("Done", at(2), at(3))]
+    assert status_at(intervals, at(1, 12)) == "To Do"
+    assert status_at(intervals, at(2)) == "Done"
+
+
+def test_status_at_returns_none_outside_intervals():
+    assert status_at([interval("To Do", at(2), at(3))], at(1)) is None
+    assert status_at([interval("To Do", at(2), at(3))], at(3)) is None
 
 
 def test_no_changes_gives_one_interval_in_current_status():
