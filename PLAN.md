@@ -83,6 +83,9 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
      - each cell shows hours, e.g. `12.5`, or `–` if the ticket was never in that status
      - a final "Total h" column shows each ticket's total
      - a footer row shows the total for each status
+   - Status columns and rows follow the order in which statuses first appear (`aggregate.status_order`). That usually matches the workflow.
+   - The timeline uses one character per time slice, coloured by the status at the middle of the slice (`timeline.status_at`). A very short status can disappear from the bar. The hours tables are always exact.
+   - The footer totals add up the rounded cells, so the table always sums correctly on screen.
 
 ## Error handling (`errors.py`, unique code per case)
 | Code | Exception | Trigger |
@@ -112,10 +115,11 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 - Part 2 is done (`d439341`). It has 21 passing tests.
 - Part 3 is done (`1ea48e3`). It has 37 new tests, so 58 tests pass in total.
   - It added JA-109 and JA-110 to the error table.
-- Part 4 is done. It has 20 new tests, so 78 tests pass in total.
+- Part 4 is done (`d001c02`). It has 20 new tests, so 78 tests pass in total.
+- Part 5 is done. It has 19 new tests, so 97 tests pass in total.
 - `--verbose` on `report` was approved by the user on 2026-10-20.
 - Optional integration tests against a real Jira site were declined by the user. Real Jira is checked only by a manual run.
-- Next: part 5 (`adapters/renderer.py`).
+- Next: part 6 (`cli.py`).
 
 ## Implementation order
 1. Branch, `pyproject.toml`, package skeleton, `utils/logger.py`, `errors.py`
