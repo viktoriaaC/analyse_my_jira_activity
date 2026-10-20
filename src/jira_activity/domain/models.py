@@ -5,6 +5,16 @@ from datetime import date, datetime, time, timedelta, tzinfo
 
 from jira_activity.errors import InvalidDateRangeError
 
+DAY_FORMAT = "%Y-%m-%d"
+
+
+def parse_day(text: str) -> date:
+    """Parse a day written as YYYY-MM-DD."""
+    try:
+        return datetime.strptime(text.strip(), DAY_FORMAT).date()
+    except ValueError as error:
+        raise InvalidDateRangeError(f"'{text}' is not a valid YYYY-MM-DD date") from error
+
 
 @dataclass(frozen=True)
 class DateRange:
