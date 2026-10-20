@@ -49,6 +49,7 @@ jira-activity configure --site https://acme.atlassian.net --email me@acme.se
 jira-activity report --from 2026-09-01 --to 2026-09-30
     [--site URL] [--email EMAIL] [--token TOKEN]   (otherwise taken from env, then keyring, then a prompt)
     [--project KEY]                                (optional JQL narrowing)
+    [--verbose]                                    (debug logging to stderr: method, path, status code only)
 ```
 - Credentials are looked up in this order: CLI flag → env vars `JIRA_SITE` / `JIRA_EMAIL` / `JIRA_API_TOKEN` → keyring → interactive prompt.
 - Site and email are only remembered if the user says yes in `configure`. The token goes only to the keyring and is never written to a plain file.
@@ -98,7 +99,13 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 `cli.py` catches `JiraActivityError`, prints `[code] message` in red and exits with a non-zero code. Unexpected exceptions get a generic JA-999 message.
 
 ## Logging
-`utils/logger.py` sets up one `logging` logger, set to WARNING by default with an optional `--verbose` flag for DEBUG. It logs only the endpoint path and status code. It never logs the token, auth headers or response bodies, and it never writes to a file.
+`utils/logger.py` sets up one `logging` logger, set to WARNING by default. `report --verbose` switches it to DEBUG; `configure` has no `--verbose`. It logs only the endpoint path and status code. It never logs the token, auth headers or response bodies, and it never writes to a file.
+
+## Status
+- Part 1 is done (`71c8509`).
+- Part 2 is done (`d439341`). It has 21 passing tests.
+- `--verbose` on `report` was approved by the user on 2026-10-20.
+- Next: part 3 (`adapters/jira_client.py`).
 
 ## Implementation order
 1. Branch, `pyproject.toml`, package skeleton, `utils/logger.py`, `errors.py`
@@ -123,4 +130,5 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 - The client tests cover every HTTP error code mapping to its JA-code.
 - `pip install -e .` and then `jira-activity --help` shows the documented usage.
 - Manual check against your real Jira Cloud site: `jira-activity report --from <last month start> --to <last month end>`. Compare a couple of tickets' histories against their History tab in the Jira UI.
+- `report --verbose` prints `GET /rest/api/3/... -> 200` lines to stderr, with no token, query string or response body. Without the flag, nothing is logged unless there is a warning.
 - Error checks: a wrong token gives JA-101, a wrong site gives JA-103 or JA-106, and `--from` after `--to` gives JA-201.
