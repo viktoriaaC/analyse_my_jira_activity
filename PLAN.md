@@ -133,7 +133,41 @@ Exit codes:
   - Progress is shown with a spinner on stderr.
 - `--verbose` on `report` was approved by the user on 2026-10-20.
 - Optional integration tests against a real Jira site were declined by the user. Real Jira is checked only by a manual run.
-- Next: part 7 (`README.md` and a pull request). Also add the `readme` line back to `pyproject.toml`.
+- Part 6 commit: `c501475`.
+- Part 7 is done:
+  - `README.md` was added and the `readme` line is back in `pyproject.toml`.
+  - The branch was pushed. The PR to `main` is opened by the user, because `gh` is not installed.
+- Still open: the manual run against a real Jira Cloud site (see Verification).
+
+## Part 7 in detail (README + PR)
+1. **`README.md`** (in English, to match the CLI help). It covers:
+   - What the tool does and who it is for. It needs Jira Cloud and Python 3.11 or later.
+   - Install: `pip install .`, or for development `python -m venv .venv` and `pip install -e ".[dev]"`.
+   - Getting an API token, with a link to the Atlassian token page.
+   - `configure` and `report` usage with examples, and the full options table (taken from `cli.py`: `--from`, `--to`, `--site`, `--email`, `--token`, `--project`, `--verbose`).
+   - The credential lookup order and environment variables, with a warning that `--token` ends up in shell history.
+   - Explanation of the output: what each of the 4 sections means.
+     - Hours are calendar hours.
+     - Days follow the local timezone, so hours can be off by one across a daylight-saving change.
+     - The timeline is approximate, but the hours tables are exact.
+   - Privacy:
+     - Nothing is saved unless you confirm in `configure`, and then only to the OS keychain.
+     - Logging happens only with `--verbose` and shows only method, path and status code.
+     - The token is never printed.
+   - The exit code table and the full JA error code table (taken from `errors.py`), each with a "what to do" hint.
+   - Development: the layer structure (`domain/` is pure, `adapters/` is all I/O, plus `utils/logger.py`) and how to run the tests (`.\.venv\Scripts\python.exe -m pytest`).
+   - Known limits:
+     - one API call per ticket
+     - the extra search day on each side of the range
+     - colours repeat after 10 statuses
+2. **`pyproject.toml`**: add `readme = "README.md"` back.
+3. **`PLAN.md`**: copy this plan file into the repo, with the Status section updated to say that part 7 is done.
+4. **Commit** with a clear purpose message, written to a file and committed with `git commit -F` (because of the PowerShell quoting issue).
+5. **Push** with `git push -u origin feature/jira-activity-cli`. This is the first push of the branch to GitHub (`viktoriaaC/analyse_my_jira_activity`).
+6. **Pull request to `main`**: `gh` is not installed, so the PR cannot be created from here.
+   - The PR title and description, ending with the Claude Code attribution line, are written to a file in the scratchpad and shown to the user.
+   - The user opens the PR from the link GitHub shows after the push: `https://github.com/viktoriaaC/analyse_my_jira_activity/pull/new/feature/jira-activity-cli`.
+   - The PR is not merged. Only the repo owner merges into `main`.
 
 ## Implementation order
 1. Branch, `pyproject.toml`, package skeleton, `utils/logger.py`, `errors.py`
@@ -145,6 +179,10 @@ Exit codes:
 7. `README.md` usage guide, then commit, push and open a PR
 
 ## Verification
+- Part 7 checks:
+  - `pip install -e .` succeeds with the `readme` line restored.
+  - Every option, error code and exit code in the README matches `cli.py` and `errors.py`.
+  - `git push` succeeds, and the PR page shows all commits from the branch.
 - `pytest` passes. Timeline tests cover:
   - no status changes
   - changes before, inside and after the range
