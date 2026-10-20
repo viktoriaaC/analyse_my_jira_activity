@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "jira-activity"
 version = "0.1.0"
 description = "CLI that shows which statuses your Jira tickets have been in during a date range"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31",
