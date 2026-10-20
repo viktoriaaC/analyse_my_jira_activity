@@ -44,7 +44,7 @@ tests/
 ## CLI design (needs your approval, since it is the public interface)
 ```
 jira-activity configure --site https://acme.atlassian.net --email me@acme.se
-    → asks for the token (hidden input), then asks "Save token in OS keychain? [y/N]"
+    → asks for the token (hidden input), then asks "Save site, email and token in the OS keychain? [y/N]"
 
 jira-activity report --from 2026-09-01 --to 2026-09-30
     [--site URL] [--email EMAIL] [--token TOKEN]   (otherwise taken from env, then keyring, then a prompt)
@@ -52,7 +52,10 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
     [--verbose]                                    (debug logging to stderr: method, path, status code only)
 ```
 - Credentials are looked up in this order: CLI flag → env vars `JIRA_SITE` / `JIRA_EMAIL` / `JIRA_API_TOKEN` → keyring → interactive prompt.
-- Site and email are only remembered if the user says yes in `configure`. The token goes only to the keyring and is never written to a plain file.
+- Site, email and token are only saved if the user says yes in `configure`.
+  - They are saved only in the OS keychain (service `jira-activity`), never in a plain file.
+  - The token is saved per email, as `api-token:<email>`.
+- `configure` does not check the credentials against Jira. A wrong token shows up on the next `report` as JA-101.
 
 ## Core flow
 1. **cli.report** checks the dates (`from <= to`, ISO format) and builds a `DateRange`.
@@ -107,11 +110,12 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 ## Status
 - Part 1 is done (`71c8509`).
 - Part 2 is done (`d439341`). It has 21 passing tests.
-- Part 3 is done. It has 37 new tests, so 58 tests pass in total.
+- Part 3 is done (`1ea48e3`). It has 37 new tests, so 58 tests pass in total.
   - It added JA-109 and JA-110 to the error table.
+- Part 4 is done. It has 20 new tests, so 78 tests pass in total.
 - `--verbose` on `report` was approved by the user on 2026-10-20.
 - Optional integration tests against a real Jira site were declined by the user. Real Jira is checked only by a manual run.
-- Next: part 4 (`adapters/credentials.py`).
+- Next: part 5 (`adapters/renderer.py`).
 
 ## Implementation order
 1. Branch, `pyproject.toml`, package skeleton, `utils/logger.py`, `errors.py`
