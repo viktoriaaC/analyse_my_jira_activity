@@ -58,6 +58,16 @@ class JiraResponseFormatError(JiraActivityError):
     message = "Jira returned a response in an unexpected format."
 
 
+class JiraBadRequestError(JiraActivityError):
+    code = "JA-109"
+    message = "Jira rejected the request (HTTP 400). Check the project key and date range."
+
+
+class JiraUnexpectedStatusError(JiraActivityError):
+    code = "JA-110"
+    message = "Jira answered with an unexpected HTTP status code."
+
+
 # --- Input errors (JA-2xx) ---
 
 class InvalidDateRangeError(JiraActivityError):
