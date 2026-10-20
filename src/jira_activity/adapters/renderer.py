@@ -93,7 +93,7 @@ def render_timeline(
     table.add_column("Ticket", width=LABEL_WIDTH, no_wrap=True)
     table.add_column(date_axis(date_range, width), no_wrap=True)
     for issue in issues:
-        table.add_row(issue.key, timeline_bar(intervals_by_issue[issue.key], date_range, width, colors))
+        table.add_row(Text(issue.key), timeline_bar(intervals_by_issue[issue.key], date_range, width, colors))
     console.print(table)
     console.print(legend(colors))
     console.print()
@@ -117,7 +117,7 @@ def render_tickets_per_status(
     for status in statuses:
         for index, key in enumerate(keys_by_status[status]):
             label = Text(status, style=colors[status]) if index == 0 else ""
-            table.add_row(label, key, summaries[key], format_hours(hours[key][status]))
+            table.add_row(label, Text(key), Text(summaries[key]), format_hours(hours[key][status]))
         table.add_section()
     console.print(table)
     console.print()
@@ -135,12 +135,12 @@ def render_hours_matrix(
     table.add_column("Ticket", footer="Total", no_wrap=True)
     table.add_column("Summary", max_width=SUMMARY_MAX_WIDTH, overflow="ellipsis", no_wrap=True)
     for status in statuses:
-        table.add_column(status, justify="right", footer=format_hours(status_totals[status]))
+        table.add_column(Text(status), justify="right", footer=format_hours(status_totals[status]))
     table.add_column("Total h", justify="right", footer=format_hours(sum(status_totals.values())))
     for issue in issues:
         row = hours[issue.key]
         cells = [format_hours(row.get(status)) for status in statuses]
-        table.add_row(issue.key, issue.summary, *cells, format_hours(sum(row.values())))
+        table.add_row(Text(issue.key), Text(issue.summary), *cells, format_hours(sum(row.values())))
     console.print(table)
 
 

@@ -12,6 +12,7 @@ from jira_activity.adapters.renderer import (
     timeline_bar,
     timeline_width,
 )
+from jira_activity.domain.models import Issue
 
 PERIOD = date_range(at(1), at(5))  # 2026-10-01 .. 2026-10-04, 96 hours
 
@@ -91,6 +92,13 @@ def test_tickets_without_intervals_are_left_out():
     text = report_text(intervals={"ABC-1": INTERVALS["ABC-1"], "ABC-2": []})
     assert "1 ticket(s)" in text
     assert "ABC-2" not in text
+
+
+def test_square_brackets_in_jira_data_are_printed_as_is():
+    tricky = [Issue("[X]-1", "[UI] Fix [bold]button[/bold]", "[Blocked]", at(1))]
+    text = report_text(issues=tricky, intervals={"[X]-1": [interval("[Blocked]", at(1), at(2))]})
+    assert line_with(text, "[X]-1", "[UI] Fix [bold]button[/bold]")
+    assert line_with(text, "Ticket", "Summary", "[Blocked]", "Total h")
 
 
 # --- timeline pieces ---
