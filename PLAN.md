@@ -58,7 +58,9 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 - `configure` does not check the credentials against Jira. A wrong token shows up on the next `report` as JA-101.
 
 ## Core flow
-1. **cli.report** checks the dates (`from <= to`, ISO format) and builds a `DateRange`.
+1. **cli.report** checks the dates (`from <= to`, ISO format, using `models.parse_day`) and builds a `DateRange`.
+   - Days start and end in the computer's local timezone at run time.
+   - Across a daylight-saving change, the hours near the change can be off by one.
 2. **jira_client.search_issues** calls `GET /rest/api/3/search/jql` with this JQL:
    `assignee was currentUser() DURING ("<from>", "<to>")` (plus `AND project = "X"` if given, quoted safely).
    - The search covers one extra day on each side of the range, because JQL reads dates in the Jira profile's timezone. Step 5 clips the extra time away.
@@ -105,7 +107,15 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 | JA-301 | `CredentialStoreError` | keyring backend failure |
 | JA-302 | `MissingCredentialsError` | no token found and not interactive |
 
-`cli.py` catches `JiraActivityError`, prints `[code] message` in red and exits with a non-zero code. Unexpected exceptions get a generic JA-999 message.
+`cli.py` catches `JiraActivityError` and prints `[code] message` in red on stderr. Unexpected exceptions get a generic JA-999 message that names the exception type.
+
+Exit codes:
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 1 | an error was shown as `[JA-xxx]` |
+| 2 | wrong command usage, reported by typer |
+| 130 | cancelled with Ctrl+C |
 
 ## Logging
 `utils/logger.py` sets up one `logging` logger, set to WARNING by default. `report --verbose` switches it to DEBUG; `configure` has no `--verbose`. It logs only the endpoint path and status code. It never logs the token, auth headers or response bodies, and it never writes to a file.
@@ -116,10 +126,14 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 - Part 3 is done (`1ea48e3`). It has 37 new tests, so 58 tests pass in total.
   - It added JA-109 and JA-110 to the error table.
 - Part 4 is done (`d001c02`). It has 20 new tests, so 78 tests pass in total.
-- Part 5 is done. It has 19 new tests, so 97 tests pass in total.
+- Part 5 is done (`0b45fb2`). It has 19 new tests, so 97 tests pass in total.
+  - Part 6 later fixed a renderer bug: rich read `[...]` in Jira data as markup, so all Jira data is now passed as `Text`.
+- Part 6 is done. It has 26 new tests, so 123 tests pass in total.
+  - typer's tab-completion options are turned off, so the CLI matches the approved design.
+  - Progress is shown with a spinner on stderr.
 - `--verbose` on `report` was approved by the user on 2026-10-20.
 - Optional integration tests against a real Jira site were declined by the user. Real Jira is checked only by a manual run.
-- Next: part 6 (`cli.py`).
+- Next: part 7 (`README.md` and a pull request). Also add the `readme` line back to `pyproject.toml`.
 
 ## Implementation order
 1. Branch, `pyproject.toml`, package skeleton, `utils/logger.py`, `errors.py`
