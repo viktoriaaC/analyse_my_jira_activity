@@ -57,7 +57,8 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 ## Core flow
 1. **cli.report** checks the dates (`from <= to`, ISO format) and builds a `DateRange`.
 2. **jira_client.search_issues** calls `GET /rest/api/3/search/jql` with this JQL:
-   `assignee was currentUser() DURING ("<from>", "<to>")` (plus `AND project = X` if given).
+   `assignee was currentUser() DURING ("<from>", "<to>")` (plus `AND project = "X"` if given, quoted safely).
+   - The search covers one extra day on each side of the range, because JQL reads dates in the Jira profile's timezone. Step 5 clips the extra time away.
    It requests the fields `summary,status,created`. Pagination uses `nextPageToken`.
 3. **jira_client.fetch_changelog(key)** calls `GET /rest/api/3/issue/{key}/changelog` with `startAt`/`isLast` pagination. It keeps only items where `field == "status"`.
 4. **timeline.build_intervals(issue, changes)** works out the status periods:
@@ -91,6 +92,8 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 | JA-106 | `JiraConnectionError` | `requests.ConnectionError` / SSL error |
 | JA-107 | `JiraTimeoutError` | `requests.Timeout` (timeout 30 s) |
 | JA-108 | `JiraResponseFormatError` | invalid JSON or missing expected keys |
+| JA-109 | `JiraBadRequestError` | HTTP 400, for example bad JQL or an unknown project. The error includes Jira's own message. |
+| JA-110 | `JiraUnexpectedStatusError` | any other non-2xx status code |
 | JA-201 | `InvalidDateRangeError` | bad format or from > to |
 | JA-202 | `InvalidSiteUrlError` | not https / not parseable |
 | JA-301 | `CredentialStoreError` | keyring backend failure |
@@ -104,8 +107,11 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 ## Status
 - Part 1 is done (`71c8509`).
 - Part 2 is done (`d439341`). It has 21 passing tests.
+- Part 3 is done. It has 37 new tests, so 58 tests pass in total.
+  - It added JA-109 and JA-110 to the error table.
 - `--verbose` on `report` was approved by the user on 2026-10-20.
-- Next: part 3 (`adapters/jira_client.py`).
+- Optional integration tests against a real Jira site were declined by the user. Real Jira is checked only by a manual run.
+- Next: part 4 (`adapters/credentials.py`).
 
 ## Implementation order
 1. Branch, `pyproject.toml`, package skeleton, `utils/logger.py`, `errors.py`
