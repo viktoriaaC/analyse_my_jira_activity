@@ -2,7 +2,9 @@ import keyring
 import pytest
 from keyring.errors import KeyringError, PasswordSetError
 
+from jira_activity.adapters import credentials as creds
 from jira_activity.adapters.credentials import (
+    ConsolePrompter,
     Credentials,
     KeyringStore,
     configure,
@@ -99,7 +101,28 @@ def test_missing_value_without_terminal_raises():
 def test_empty_prompt_answer_raises():
     with pytest.raises(Exception) as error:
         resolve_credentials(SITE, EMAIL, None, env={}, store=FakeStore(), prompter=FakePrompter(answers=[""]))
-    assert error.value.code == "JA-302"
+    assert error.value.code == "JA-303"
+    assert "Jira API token" in str(error.value)
+
+
+@pytest.mark.parametrize("secret", [False, True])
+def test_console_prompter_raises_when_input_ends(monkeypatch, secret):
+    def end_of_input(prompt=""):
+        raise EOFError
+    monkeypatch.setattr("builtins.input", end_of_input)
+    monkeypatch.setattr(creds.getpass, "getpass", end_of_input)
+    with pytest.raises(Exception) as error:
+        ConsolePrompter().ask("Jira email", secret=secret)
+    assert error.value.code == "JA-305"
+
+
+def test_console_prompter_confirm_raises_when_input_ends(monkeypatch):
+    def end_of_input(prompt=""):
+        raise EOFError
+    monkeypatch.setattr("builtins.input", end_of_input)
+    with pytest.raises(Exception) as error:
+        ConsolePrompter().confirm("Save?")
+    assert error.value.code == "JA-305"
 
 
 def test_resolving_never_saves_anything():
@@ -155,14 +178,19 @@ def test_keyring_store_reads_and_writes_under_service(monkeypatch):
     assert saved == {("jira-activity", "email"): EMAIL}
 
 
-@pytest.mark.parametrize("exception", [KeyringError("boom"), RuntimeError("backend crashed")])
-def test_keyring_read_failure_raises_store_error(monkeypatch, exception):
+@pytest.mark.parametrize(
+    "exception, code",
+    [(KeyringError("boom"), "JA-301"), (RuntimeError("backend crashed"), "JA-304")],
+    ids=["known-keyring-error", "unexpected-backend-crash"],
+)
+def test_keyring_read_failure_raises_store_error(monkeypatch, exception, code):
     def fail(service, name):
         raise exception
     monkeypatch.setattr(keyring, "get_password", fail)
     with pytest.raises(Exception) as error:
         KeyringStore().get("site")
-    assert error.value.code == "JA-301"
+    assert error.value.code == code
+    assert "reading 'site'" in str(error.value)
 
 
 def test_keyring_write_failure_raises_store_error(monkeypatch):

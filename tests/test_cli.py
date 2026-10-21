@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 from helpers import at, change, issue
 from jira_activity import cli
 from jira_activity.adapters.jira_client import JiraClient as RealJiraClient
-from jira_activity.errors import JiraAuthError
+from jira_activity.errors import JiraAuthError, OutputWriteError
 
 runner = CliRunner()
 
@@ -151,6 +151,15 @@ def test_unexpected_error_gives_ja_999():
     assert result.exit_code == 1
     assert "[JA-999]" in result.stderr
     assert "ZeroDivisionError" in result.stderr
+
+
+def test_output_failure_gives_ja_401(monkeypatch):
+    def broken_output(report):
+        raise OutputWriteError("BrokenPipeError")
+    monkeypatch.setattr(cli, "print_report", broken_output)
+    result = run("report", *PERIOD_OPTIONS, *CREDENTIAL_OPTIONS)
+    assert result.exit_code == 1
+    assert "[JA-401]" in result.stderr
 
 
 def test_ctrl_c_exits_130():

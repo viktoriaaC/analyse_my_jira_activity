@@ -26,6 +26,19 @@ def build_intervals(issue: Issue, changes: list[StatusChange], now: datetime) ->
     return [interval for interval in intervals if interval.end > interval.start]
 
 
+def intervals_in_range(
+    issues: list[Issue],
+    changes_by_key: dict[str, list[StatusChange]],
+    date_range: DateRange,
+    now: datetime,
+) -> dict[str, list[StatusInterval]]:
+    """Return each issue's status intervals, clipped to the date range."""
+    return {
+        issue.key: clip(build_intervals(issue, changes_by_key.get(issue.key, []), now), date_range)
+        for issue in issues
+    }
+
+
 def status_at(intervals: list[StatusInterval], moment: datetime) -> str | None:
     """Return the status at the given moment, or None if no interval covers it."""
     for interval in intervals:

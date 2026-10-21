@@ -1,6 +1,7 @@
 """Terminal output of the report, using rich.
 
-This module only formats: every number comes from the domain layer.
+This module only formats: every number comes from domain.report.Report.
+Jira data (keys, summaries, statuses) is always wrapped in Text so rich never reads it as markup.
 """
 
 from datetime import timedelta
@@ -9,14 +10,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from jira_activity.domain.aggregate import (
-    IntervalsByIssue,
-    hours_per_ticket_status,
-    status_order,
-    tickets_per_status,
-    time_per_status,
-)
-from jira_activity.domain.models import DateRange, Issue, StatusInterval
+from jira_activity.domain.models import DateRange, StatusInterval
+from jira_activity.domain.report import Report
 from jira_activity.domain.timeline import status_at
 
 STATUS_COLORS = [
@@ -28,118 +23,93 @@ GAP = "·"
 EMPTY_CELL = "–"
 DATE_FORMAT = "%Y-%m-%d"
 LABEL_WIDTH = 12
+# Column separator and padding that the timeline table adds around the bar.
+TABLE_CHROME_WIDTH = 4
 MIN_TIMELINE_WIDTH = 20
 MAX_TIMELINE_WIDTH = 100
 SUMMARY_MAX_WIDTH = 40
 
 
-def render_report(
-    console: Console,
-    issues: list[Issue],
-    intervals_by_issue: IntervalsByIssue,
-    date_range: DateRange,
-) -> None:
+def render_report(console: Console, report: Report) -> None:
     """Print the whole report: title, summary, timeline, tickets per status and hours matrix."""
-    shown = [issue for issue in issues if intervals_by_issue.get(issue.key)]
-    render_title(console, date_range, len(shown))
-    if not shown:
+    render_title(console, report)
+    if not report.issues:
         console.print("No tickets were assigned to you in this period.")
         return
-    statuses = status_order(intervals_by_issue)
-    colors = assign_colors(statuses)
-    hours = hours_per_ticket_status(intervals_by_issue)
-    keys_by_status = tickets_per_status(intervals_by_issue)
-    render_summary(console, statuses, time_per_status(intervals_by_issue), keys_by_status, colors)
-    render_timeline(console, shown, intervals_by_issue, date_range, colors)
-    render_tickets_per_status(console, shown, statuses, keys_by_status, hours, colors)
-    render_hours_matrix(console, shown, statuses, hours)
+    colors = assign_colors(report.statuses)
+    render_summary(console, report, colors)
+    render_timeline(console, report, colors)
+    render_tickets_per_status(console, report, colors)
+    render_hours_matrix(console, report)
 
 
-def render_title(console: Console, date_range: DateRange, ticket_count: int) -> None:
+def render_title(console: Console, report: Report) -> None:
     """Print the report heading with the period and number of tickets."""
-    first, last = period_labels(date_range)
+    first, last = period_labels(report.date_range)
     console.print(Text(f"Jira activity {first} – {last}", style="bold"))
-    console.print(f"{ticket_count} ticket(s) assigned to you in the period. Hours are calendar hours.\n")
+    console.print(f"{len(report.issues)} ticket(s) assigned to you in the period. Hours are calendar hours.\n")
 
 
-def render_summary(
-    console: Console,
-    statuses: list[str],
-    hours_by_status: dict[str, float],
-    keys_by_status: dict[str, list[str]],
-    colors: dict[str, str],
-) -> None:
+def render_summary(console: Console, report: Report, colors: dict[str, str]) -> None:
     """Print total hours and number of tickets per status."""
     table = Table(title="Time per status")
     table.add_column("Status")
     table.add_column("Hours", justify="right")
     table.add_column("Tickets", justify="right")
-    for status in statuses:
-        table.add_row(Text(status, style=colors[status]), format_hours(hours_by_status[status]), str(len(keys_by_status[status])))
+    for status in report.statuses:
+        table.add_row(
+            Text(status, style=colors[status]),
+            format_hours(report.hours_by_status[status]),
+            str(len(report.tickets_by_status[status])),
+        )
     console.print(table)
     console.print()
 
 
-def render_timeline(
-    console: Console,
-    issues: list[Issue],
-    intervals_by_issue: IntervalsByIssue,
-    date_range: DateRange,
-    colors: dict[str, str],
-) -> None:
+def render_timeline(console: Console, report: Report, colors: dict[str, str]) -> None:
     """Print one coloured bar per ticket over the period, with a date axis and a legend."""
     width = timeline_width(console)
     table = Table(title="Status timeline", show_edge=False, pad_edge=False)
     table.add_column("Ticket", width=LABEL_WIDTH, no_wrap=True)
-    table.add_column(date_axis(date_range, width), no_wrap=True)
-    for issue in issues:
-        table.add_row(Text(issue.key), timeline_bar(intervals_by_issue[issue.key], date_range, width, colors))
+    table.add_column(date_axis(report.date_range, width), no_wrap=True)
+    for issue in report.issues:
+        bar = timeline_bar(report.intervals_by_issue[issue.key], report.date_range, width, colors)
+        table.add_row(Text(issue.key), bar)
     console.print(table)
     console.print(legend(colors))
     console.print()
 
 
-def render_tickets_per_status(
-    console: Console,
-    issues: list[Issue],
-    statuses: list[str],
-    keys_by_status: dict[str, list[str]],
-    hours: dict[str, dict[str, float]],
-    colors: dict[str, str],
-) -> None:
+def render_tickets_per_status(console: Console, report: Report, colors: dict[str, str]) -> None:
     """Print, for each status, the tickets that were in it and for how many hours."""
-    summaries = {issue.key: issue.summary for issue in issues}
+    summaries = {issue.key: issue.summary for issue in report.issues}
     table = Table(title="Tickets per status")
     table.add_column("Status")
     table.add_column("Ticket", no_wrap=True)
     table.add_column("Summary", max_width=SUMMARY_MAX_WIDTH, overflow="ellipsis", no_wrap=True)
     table.add_column("Hours", justify="right")
-    for status in statuses:
-        for index, key in enumerate(keys_by_status[status]):
+    for status in report.statuses:
+        for index, key in enumerate(report.tickets_by_status[status]):
             label = Text(status, style=colors[status]) if index == 0 else ""
-            table.add_row(label, Text(key), Text(summaries[key]), format_hours(hours[key][status]))
+            hours = format_hours(report.hours_by_ticket[key][status])
+            table.add_row(label, Text(key), Text(summaries[key]), hours)
         table.add_section()
     console.print(table)
     console.print()
 
 
-def render_hours_matrix(
-    console: Console,
-    issues: list[Issue],
-    statuses: list[str],
-    hours: dict[str, dict[str, float]],
-) -> None:
+def render_hours_matrix(console: Console, report: Report) -> None:
     """Print hours per ticket and status, with a total per ticket and per status."""
-    status_totals = {status: sum(hours[issue.key].get(status, 0.0) for issue in issues) for status in statuses}
+    totals = report.matrix_status_totals
     table = Table(title="Hours per status", show_footer=True)
     table.add_column("Ticket", footer="Total", no_wrap=True)
     table.add_column("Summary", max_width=SUMMARY_MAX_WIDTH, overflow="ellipsis", no_wrap=True)
-    for status in statuses:
-        table.add_column(Text(status), justify="right", footer=format_hours(status_totals[status]))
-    table.add_column("Total h", justify="right", footer=format_hours(sum(status_totals.values())))
-    for issue in issues:
-        row = hours[issue.key]
-        cells = [format_hours(row.get(status)) for status in statuses]
+    for status in report.statuses:
+        table.add_column(Text(status), justify="right", footer=format_hours(totals[status]))
+    table.add_column("Total h", justify="right", footer=format_hours(sum(totals.values())))
+    for issue in report.issues:
+        row = report.hours_by_ticket[issue.key]
+        cells = [format_hours(row.get(status)) for status in report.statuses]
         table.add_row(Text(issue.key), Text(issue.summary), *cells, format_hours(sum(row.values())))
     console.print(table)
 
@@ -162,7 +132,7 @@ def period_labels(date_range: DateRange) -> tuple[str, str]:
 
 def timeline_width(console: Console) -> int:
     """Number of characters available for the timeline bars."""
-    available = console.width - LABEL_WIDTH - 4
+    available = console.width - LABEL_WIDTH - TABLE_CHROME_WIDTH
     return max(MIN_TIMELINE_WIDTH, min(MAX_TIMELINE_WIDTH, available))
 
 

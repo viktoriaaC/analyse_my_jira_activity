@@ -31,10 +31,13 @@ src/jira_activity/
     models.py                  # dataclasses: Issue, StatusChange, StatusInterval, DateRange
     timeline.py                # build status intervals from changelog; clip to date range
     aggregate.py               # time-per-status totals; status → tickets mapping
+    report.py                  # Report: every number the report shows, computed in one place
   adapters/                    # ALL I/O lives here
     jira_client.py             # HTTP calls to Jira (requests), pagination, response parsing
     credentials.py             # keyring read/write, env var lookup, hidden prompt
-    renderer.py                # rich tables + text Gantt timeline
+    renderer.py                # rich tables + text Gantt timeline (formats a Report only)
+    terminal.py                # stdout/stderr: UTF-8 when redirected, report, messages, errors, spinner
+    clock.py                   # current time and local timezone
   utils/
     logger.py                  # the single logging config; never logs tokens or response bodies
 tests/
@@ -102,10 +105,16 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 | JA-108 | `JiraResponseFormatError` | invalid JSON or missing expected keys |
 | JA-109 | `JiraBadRequestError` | HTTP 400, for example bad JQL or an unknown project. The error includes Jira's own message. |
 | JA-110 | `JiraUnexpectedStatusError` | any other non-2xx status code |
+| JA-111 | `JiraSslError` | `requests` SSL certificate error (split out of JA-106) |
+| JA-112 | `JiraRequestError` | any other `requests` error, for example too many redirects (split out of JA-106) |
 | JA-201 | `InvalidDateRangeError` | bad format or from > to |
 | JA-202 | `InvalidSiteUrlError` | not https / not parseable |
 | JA-301 | `CredentialStoreError` | keyring backend failure |
 | JA-302 | `MissingCredentialsError` | no token found and not interactive |
+| JA-303 | `EmptyCredentialError` | empty answer at the prompt (split out of JA-302) |
+| JA-304 | `CredentialStoreBackendError` | unexpected keychain backend crash (split out of JA-301) |
+| JA-305 | `PromptAbortedError` | input ended at a prompt (`EOFError`) |
+| JA-401 | `OutputWriteError` | the report could not be written (closed pipe or encoding) |
 
 `cli.py` catches `JiraActivityError` and prints `[code] message` in red on stderr. Unexpected exceptions get a generic JA-999 message that names the exception type.
 

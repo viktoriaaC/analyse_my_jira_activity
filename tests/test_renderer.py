@@ -13,6 +13,7 @@ from jira_activity.adapters.renderer import (
     timeline_width,
 )
 from jira_activity.domain.models import Issue
+from jira_activity.domain.report import build_report
 
 PERIOD = date_range(at(1), at(5))  # 2026-10-01 .. 2026-10-04, 96 hours
 
@@ -32,7 +33,7 @@ def recording_console(width=140):
 
 def report_text(issues=ISSUES, intervals=INTERVALS):
     console = recording_console()
-    render_report(console, issues, intervals, PERIOD)
+    render_report(console, build_report(issues, intervals, PERIOD))
     return console.export_text()
 
 

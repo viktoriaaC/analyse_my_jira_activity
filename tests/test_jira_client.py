@@ -227,10 +227,10 @@ def test_retry_after_is_capped():
     "exception, code",
     [
         (requests.ConnectionError("down"), "JA-106"),
-        (requests.exceptions.SSLError("bad cert"), "JA-106"),
+        (requests.exceptions.SSLError("bad cert"), "JA-111"),
         (requests.Timeout("slow"), "JA-107"),
         (requests.exceptions.ConnectTimeout("slow connect"), "JA-107"),
-        (requests.exceptions.TooManyRedirects("loop"), "JA-106"),
+        (requests.exceptions.TooManyRedirects("loop"), "JA-112"),
     ],
 )
 def test_network_errors_map_to_error_code(exception, code):
