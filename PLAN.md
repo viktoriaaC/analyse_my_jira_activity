@@ -32,6 +32,7 @@ src/jira_activity/
     timeline.py                # build status intervals from changelog; clip to date range
     aggregate.py               # time-per-status totals; status → tickets mapping
     report.py                  # Report: every number the report shows, computed in one place
+    validation.py              # site URL (only https://<site>.atlassian.net) and email validation
   adapters/                    # ALL I/O lives here
     jira_client.py             # HTTP calls to Jira (requests), pagination, response parsing
     credentials.py             # keyring read/write, env var lookup, hidden prompt
@@ -107,8 +108,11 @@ jira-activity report --from 2026-09-01 --to 2026-09-30
 | JA-110 | `JiraUnexpectedStatusError` | any other non-2xx status code |
 | JA-111 | `JiraSslError` | `requests` SSL certificate error (split out of JA-106) |
 | JA-112 | `JiraRequestError` | any other `requests` error, for example too many redirects (split out of JA-106) |
+| JA-113 | `JiraTooManyPagesError` | more than 1000 result pages, or the same page token twice |
 | JA-201 | `InvalidDateRangeError` | bad format or from > to |
-| JA-202 | `InvalidSiteUrlError` | not https / not parseable |
+| JA-202 | `InvalidSiteUrlError` | not `https://<site>.atlassian.net`: other scheme or host, username/password in the URL, or a custom port. The reason is in the detail, and credentials in the URL are never echoed. |
+| JA-203 | `InvalidEmailError` | the email does not look like an email address |
+| JA-204 | `DateRangeTooLongError` | the period is longer than 366 days |
 | JA-301 | `CredentialStoreError` | keyring backend failure |
 | JA-302 | `MissingCredentialsError` | no token found and not interactive |
 | JA-303 | `EmptyCredentialError` | empty answer at the prompt (split out of JA-302) |

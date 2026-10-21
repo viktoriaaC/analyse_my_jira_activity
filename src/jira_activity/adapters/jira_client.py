@@ -3,13 +3,13 @@
 import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import requests
 
 from jira_activity.domain.models import DateRange, Issue, StatusChange
+from jira_activity.domain.validation import validate_site_url
 from jira_activity.errors import (
-    InvalidSiteUrlError,
     JiraAuthError,
     JiraBadRequestError,
     JiraConnectionError,
@@ -21,6 +21,7 @@ from jira_activity.errors import (
     JiraServerError,
     JiraSslError,
     JiraTimeoutError,
+    JiraTooManyPagesError,
     JiraUnexpectedStatusError,
 )
 from jira_activity.utils.logger import log_request
@@ -29,6 +30,8 @@ SEARCH_PATH = "/rest/api/3/search/jql"
 CHANGELOG_PATH = "/rest/api/3/issue/{key}/changelog"
 SEARCH_FIELDS = "summary,status,created"
 PAGE_SIZE = 100
+# Upper bound on pages per search or changelog (100 000 items), so a misbehaving server cannot loop forever.
+MAX_PAGES = 1000
 TIMEOUT_SECONDS = 30
 MAX_RETRIES = 3
 MAX_RETRY_DELAY_SECONDS = 60
@@ -45,14 +48,6 @@ _ERRORS_BY_STATUS = {
     403: JiraPermissionError,
     404: JiraNotFoundError,
 }
-
-
-def validate_site_url(site: str) -> str:
-    """Return the site URL without a trailing slash, or raise if it is not an https URL."""
-    parts = urlsplit(site.strip())
-    if parts.scheme != "https" or not parts.hostname:
-        raise InvalidSiteUrlError(site)
-    return f"https://{parts.netloc}"
 
 
 def build_jql(date_range: DateRange, project: str | None = None) -> str:
@@ -102,27 +97,31 @@ class JiraClient:
         return sorted(changes, key=lambda change: change.at)
 
     def _search_pages(self, jql: str) -> Iterator[dict]:
-        """Yield raw issues page by page using nextPageToken."""
+        """Yield raw issues page by page using nextPageToken, stopping after MAX_PAGES pages."""
         params = {"jql": jql, "fields": SEARCH_FIELDS, "maxResults": PAGE_SIZE}
-        while True:
+        for _ in range(MAX_PAGES):
             page = self._get(SEARCH_PATH, params)
             yield from _required(page, "issues")
             token = page.get("nextPageToken")
             if page.get("isLast", True) or not token:
                 return
+            if token == params.get("nextPageToken"):
+                raise JiraTooManyPagesError("Jira returned the same page token twice")
             params = {**params, "nextPageToken": token}
+        raise JiraTooManyPagesError(f"search stopped after {MAX_PAGES} pages")
 
     def _changelog_pages(self, key: str) -> Iterator[dict]:
-        """Yield raw changelog entries page by page using startAt."""
-        path = CHANGELOG_PATH.format(key=key)
+        """Yield raw changelog entries page by page using startAt, stopping after MAX_PAGES pages."""
+        path = CHANGELOG_PATH.format(key=quote(key, safe=""))
         start_at = 0
-        while True:
+        for _ in range(MAX_PAGES):
             page = self._get(path, {"startAt": start_at, "maxResults": PAGE_SIZE})
             values = _required(page, "values")
             yield from values
             start_at += len(values)
             if not values or page.get("isLast", start_at >= page.get("total", 0)):
                 return
+        raise JiraTooManyPagesError(f"history of {key} stopped after {MAX_PAGES} pages")
 
     def _get(self, path: str, params: dict) -> dict:
         """GET a Jira endpoint and return the JSON body."""

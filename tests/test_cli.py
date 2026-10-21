@@ -145,6 +145,21 @@ def test_invalid_site_gives_ja_202(monkeypatch):
     assert "[JA-202]" in result.stderr
 
 
+def test_credentials_are_never_sent_to_a_non_jira_host():
+    result = run("report", *PERIOD_OPTIONS, "--site", "https://acme.atlassian.net@evil.example",
+                 "--email", "me@acme.se", "--token", "secret-token")
+    assert result.exit_code == 1
+    assert "[JA-202]" in result.stderr
+    assert FakeClient.instances == []
+
+
+def test_too_long_period_gives_ja_204():
+    result = run("report", "--from", "2025-01-01", "--to", "2026-10-01", *CREDENTIAL_OPTIONS)
+    assert result.exit_code == 1
+    assert "[JA-204]" in result.stderr
+    assert FakeClient.instances == []
+
+
 def test_unexpected_error_gives_ja_999():
     FakeClient.error = ZeroDivisionError("boom")
     result = run("report", *PERIOD_OPTIONS, *CREDENTIAL_OPTIONS)

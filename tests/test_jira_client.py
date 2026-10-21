@@ -2,7 +2,8 @@ import pytest
 import requests
 
 from helpers import at, change, date_range
-from jira_activity.adapters.jira_client import JiraClient, build_jql, validate_site_url
+from jira_activity.adapters import jira_client
+from jira_activity.adapters.jira_client import JiraClient, build_jql
 from jira_activity.domain.models import Issue
 
 SITE = "https://acme.atlassian.net"
@@ -57,16 +58,12 @@ def status_item(from_status, to_status):
     return {"field": "status", "fromString": from_status, "toString": to_status}
 
 
-# --- site URL and JQL ---
+# --- site URL and JQL (site URL rules are tested in test_validation.py) ---
 
-def test_validate_site_url_strips_path_and_trailing_slash():
-    assert validate_site_url(" https://acme.atlassian.net/jira/ ") == SITE
-
-
-@pytest.mark.parametrize("site", ["http://acme.atlassian.net", "acme.atlassian.net", "https://", ""])
-def test_validate_site_url_rejects_non_https(site):
+@pytest.mark.parametrize("site", ["https://evil.example", "https://acme.atlassian.net@evil.example"])
+def test_client_refuses_to_send_credentials_to_other_hosts(site):
     with pytest.raises(Exception) as error:
-        validate_site_url(site)
+        JiraClient(site, "me@acme.se", "secret-token", session=FakeSession())
     assert error.value.code == "JA-202"
 
 
@@ -151,6 +148,42 @@ def test_fetch_status_changes_follows_pages_and_sorts():
     changes = client.fetch_status_changes("ABC-1")
     assert changes == [change(at(2), "To Do", "In Progress"), change(at(4), "In Progress", "Done")]
     assert session.calls[1]["params"]["startAt"] == 1
+
+
+def test_issue_key_is_url_encoded_in_changelog_path():
+    client, session, _ = make_client(FakeResponse(body={"values": [], "isLast": True}))
+    client.fetch_status_changes("../../myself?x=1#")
+    assert session.calls[0]["url"] == SITE + "/rest/api/3/issue/..%2F..%2Fmyself%3Fx%3D1%23/changelog"
+
+
+def test_search_stops_when_jira_repeats_the_page_token():
+    page = {"issues": [raw_issue()], "nextPageToken": "same", "isLast": False}
+    client, session, _ = make_client(FakeResponse(body=page), FakeResponse(body=page))
+    with pytest.raises(Exception) as error:
+        client.search_issues("jql")
+    assert error.value.code == "JA-113"
+    assert len(session.calls) == 2
+
+
+def test_search_stops_after_max_pages(monkeypatch):
+    monkeypatch.setattr(jira_client, "MAX_PAGES", 3)
+    pages = [FakeResponse(body={"issues": [], "nextPageToken": f"p{n}", "isLast": False}) for n in range(5)]
+    client, session, _ = make_client(*pages)
+    with pytest.raises(Exception) as error:
+        client.search_issues("jql")
+    assert error.value.code == "JA-113"
+    assert len(session.calls) == 3
+
+
+def test_changelog_stops_after_max_pages(monkeypatch):
+    monkeypatch.setattr(jira_client, "MAX_PAGES", 2)
+    entry = changelog_entry("2026-10-02T00:00:00.000+0000", status_item("To Do", "Done"))
+    pages = [FakeResponse(body={"values": [entry], "isLast": False}) for _ in range(3)]
+    client, session, _ = make_client(*pages)
+    with pytest.raises(Exception) as error:
+        client.fetch_status_changes("ABC-1")
+    assert error.value.code == "JA-113"
+    assert len(session.calls) == 2
 
 
 def test_fetch_status_changes_stops_on_empty_page():

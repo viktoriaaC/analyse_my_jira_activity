@@ -4,7 +4,7 @@ import pytest
 
 from helpers import at, interval
 from jira_activity.domain.models import DateRange, parse_day
-from jira_activity.errors import InvalidDateRangeError
+from jira_activity.errors import DateRangeTooLongError, InvalidDateRangeError
 
 
 def test_date_range_covers_whole_days():
@@ -22,6 +22,18 @@ def test_date_range_rejects_start_after_end():
     with pytest.raises(InvalidDateRangeError) as error:
         DateRange.from_dates(date(2026, 10, 2), date(2026, 10, 1), timezone.utc)
     assert error.value.code == "JA-201"
+
+
+def test_date_range_allows_366_days():
+    result = DateRange.from_dates(date(2028, 1, 1), date(2028, 12, 31), timezone.utc)
+    assert (result.end - result.start).days == 366
+
+
+def test_date_range_rejects_more_than_366_days():
+    with pytest.raises(DateRangeTooLongError) as error:
+        DateRange.from_dates(date(2026, 1, 1), date(2027, 1, 2), timezone.utc)
+    assert error.value.code == "JA-204"
+    assert "367 days" in str(error.value)
 
 
 def test_parse_day_reads_iso_date():
