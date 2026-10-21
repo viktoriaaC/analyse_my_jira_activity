@@ -131,6 +131,29 @@ def test_resolving_never_saves_anything():
     assert store.values == {}
 
 
+def test_invalid_email_from_env_is_rejected_before_asking_for_token():
+    prompter = FakePrompter(answers=["token"])
+    with pytest.raises(Exception) as error:
+        resolve_credentials(None, None, None, env={"JIRA_SITE": SITE, "JIRA_EMAIL": "not-an-email"},
+                            store=FakeStore(), prompter=prompter)
+    assert error.value.code == "JA-203"
+    assert prompter.asked == []
+
+
+def test_invalid_site_in_keychain_is_rejected():
+    store = FakeStore({"site": "https://evil.example", "email": EMAIL, token_key(EMAIL): "t"})
+    with pytest.raises(Exception) as error:
+        resolve_credentials(None, None, None, env={}, store=store, prompter=FakePrompter())
+    assert error.value.code == "JA-202"
+    assert store.reads == ["site"]
+
+
+def test_resolved_site_and_email_are_normalised():
+    result = resolve_credentials("https://ACME.atlassian.net/jira/", " me@acme.se ", "t",
+                                 env={}, store=FakeStore(), prompter=FakePrompter())
+    assert (result.site, result.email) == (SITE, EMAIL)
+
+
 def test_token_is_hidden_in_repr():
     assert "secret" not in repr(Credentials(SITE, EMAIL, "secret"))
 
@@ -157,6 +180,14 @@ def test_configure_rejects_bad_site_before_asking_for_token():
     with pytest.raises(Exception) as error:
         configure("http://acme.atlassian.net", EMAIL, store=FakeStore(), prompter=prompter)
     assert error.value.code == "JA-202"
+    assert prompter.asked == []
+
+
+def test_configure_rejects_bad_email_before_asking_for_token():
+    prompter = FakePrompter(answers=["t"], confirm=True)
+    with pytest.raises(Exception) as error:
+        configure(SITE, "me@", store=FakeStore(), prompter=prompter)
+    assert error.value.code == "JA-203"
     assert prompter.asked == []
 
 

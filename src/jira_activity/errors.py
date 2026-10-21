@@ -78,6 +78,11 @@ class JiraRequestError(JiraActivityError):
     message = "The request to Jira could not be completed (for example too many redirects)."
 
 
+class JiraTooManyPagesError(JiraActivityError):
+    code = "JA-113"
+    message = "Jira kept returning more result pages than expected, so reading was stopped."
+
+
 # --- Input errors (JA-2xx) ---
 
 class InvalidDateRangeError(JiraActivityError):
@@ -88,6 +93,16 @@ class InvalidDateRangeError(JiraActivityError):
 class InvalidSiteUrlError(JiraActivityError):
     code = "JA-202"
     message = "Invalid Jira site URL. Use the form https://<your-site>.atlassian.net."
+
+
+class InvalidEmailError(JiraActivityError):
+    code = "JA-203"
+    message = "Invalid email address for the Atlassian account."
+
+
+class DateRangeTooLongError(JiraActivityError):
+    code = "JA-204"
+    message = "The date range is too long. Use at most 366 days per report."
 
 
 # --- Credential errors (JA-3xx) ---

@@ -58,7 +58,7 @@ Shows the four sections listed above for the period.
 | Option | Required | Description |
 |---|---|---|
 | `--from YYYY-MM-DD` | yes | First day of the period. |
-| `--to YYYY-MM-DD` | yes | Last day of the period. This day is **included**. |
+| `--to YYYY-MM-DD` | yes | Last day of the period. This day is **included**. The period can be at most 366 days. |
 | `--site URL` | no | Jira site, for example `https://acme.atlassian.net`. |
 | `--email EMAIL` | no | Email address of your Atlassian account. |
 | `--token TOKEN` | no | Jira API token. Prefer the environment variable or the keychain, because options end up in shell history. |
@@ -110,6 +110,7 @@ If a value is missing and there is no terminal to ask in (for example in a scrip
 - **The token is never printed or logged.** It is not shown in error messages either.
 - **Logging is off by default.** With `--verbose`, each request is logged to stderr as method, path and status code only. Query strings, headers and response bodies are never logged.
 - The tool only **reads** from Jira. It never changes tickets.
+- **Credentials are only sent to Jira Cloud.** The site must be exactly `https://<your-site>.atlassian.net`. Other hosts, a username or password inside the URL, and custom ports are refused (`JA-202`), so a typo or a crafted URL such as `https://acme.atlassian.net@evil.example` cannot send your token elsewhere. Jira Cloud custom domains are therefore not supported.
 
 ## Exit codes
 
@@ -136,8 +137,11 @@ If a value is missing and there is no terminal to ask in (for example in a scrip
 | JA-110 | Jira answered with an unexpected HTTP status. | Try again. Use `--verbose` to see the status code. |
 | JA-111 | The site's SSL certificate could not be verified. | Check your VPN or company proxy. Proxies that inspect traffic need their certificate trusted by Python. |
 | JA-112 | The request could not be completed, for example because of too many redirects. | Check that the site URL points directly to your Jira Cloud site. |
+| JA-113 | Jira kept returning more result pages than expected (over 1000 pages, or the same page twice). | Use a shorter period or `--project`, and try again. |
 | JA-201 | Invalid date range. | Use `YYYY-MM-DD`, and make sure `--from` is not after `--to`. |
-| JA-202 | Invalid Jira site URL. | Use the form `https://<your-site>.atlassian.net`. |
+| JA-202 | Invalid Jira site URL. The reason is shown in brackets. | Use the form `https://<your-site>.atlassian.net`, with no username, password or port. |
+| JA-203 | Invalid email address. | Use the email address of your Atlassian account. |
+| JA-204 | The date range is longer than 366 days. | Split the period into several reports. |
 | JA-301 | The OS keychain could not be read or written. | Check that your OS keychain is available and unlocked. |
 | JA-302 | No Jira credentials found. | Pass the options, set the environment variables, or run `configure`. |
 | JA-303 | A credential was left empty at the prompt. | Run again and type the value, or pass it as an option. |

@@ -15,7 +15,7 @@ from typing import Protocol, TypeVar
 import keyring
 from keyring.errors import KeyringError
 
-from jira_activity.adapters.jira_client import validate_site_url
+from jira_activity.domain.validation import validate_email, validate_site_url
 from jira_activity.errors import (
     CredentialStoreBackendError,
     CredentialStoreError,
@@ -118,8 +118,12 @@ def resolve_credentials(
     env = os.environ if env is None else env
     store = store or KeyringStore()
     prompter = prompter or ConsolePrompter()
-    site = resolve_value("Jira site URL", site, env.get(ENV_SITE), lambda: store.get(SITE_KEY), prompter)
-    email = resolve_value("Jira email", email, env.get(ENV_EMAIL), lambda: store.get(EMAIL_KEY), prompter)
+    site = validate_site_url(
+        resolve_value("Jira site URL", site, env.get(ENV_SITE), lambda: store.get(SITE_KEY), prompter)
+    )
+    email = validate_email(
+        resolve_value("Jira email", email, env.get(ENV_EMAIL), lambda: store.get(EMAIL_KEY), prompter)
+    )
     token = resolve_value(
         "Jira API token", token, env.get(ENV_TOKEN), lambda: store.get(token_key(email)), prompter, secret=True
     )
@@ -164,6 +168,7 @@ def configure(
     store = store or KeyringStore()
     prompter = prompter or ConsolePrompter()
     site = validate_site_url(site)
+    email = validate_email(email)
     token = ask_required("Jira API token", prompter, secret=True)
     credentials = Credentials(site=site, email=email, token=token)
     if not prompter.confirm(SAVE_QUESTION):
