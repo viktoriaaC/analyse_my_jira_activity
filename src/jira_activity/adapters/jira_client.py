@@ -16,8 +16,10 @@ from jira_activity.errors import (
     JiraNotFoundError,
     JiraPermissionError,
     JiraRateLimitError,
+    JiraRequestError,
     JiraResponseFormatError,
     JiraServerError,
+    JiraSslError,
     JiraTimeoutError,
     JiraUnexpectedStatusError,
 )
@@ -123,28 +125,37 @@ class JiraClient:
                 return
 
     def _get(self, path: str, params: dict) -> dict:
-        """GET a Jira endpoint, retrying on rate limits, and return the JSON body."""
-        url = self._base_url + path
-        for attempt in range(MAX_RETRIES + 1):
+        """GET a Jira endpoint and return the JSON body."""
+        response = self._send_with_retries(self._base_url + path, params)
+        _raise_for_status(response)
+        return _parse_json(response)
+
+    def _send_with_retries(self, url: str, params: dict) -> requests.Response:
+        """Send the request, waiting and retrying while Jira answers 429 (rate limited)."""
+        for attempt in range(MAX_RETRIES):
             response = self._send(url, params)
-            log_request("GET", url, response.status_code)
             if response.status_code != 429:
-                _raise_for_status(response)
-                return _parse_json(response)
-            if attempt < MAX_RETRIES:
-                self._sleep(_retry_delay(response, attempt))
-        raise JiraRateLimitError(f"gave up after {MAX_RETRIES} retries")
+                return response
+            self._sleep(_retry_delay(response, attempt))
+        response = self._send(url, params)
+        if response.status_code == 429:
+            raise JiraRateLimitError(f"gave up after {MAX_RETRIES} retries")
+        return response
 
     def _send(self, url: str, params: dict) -> requests.Response:
-        """Send one GET request and turn network failures into tool errors."""
+        """Send one GET request, log it, and turn network failures into tool errors."""
         try:
-            return self._session.get(url, params=params, timeout=TIMEOUT_SECONDS)
+            response = self._session.get(url, params=params, timeout=TIMEOUT_SECONDS)
         except requests.Timeout as error:
             raise JiraTimeoutError(f"no answer within {TIMEOUT_SECONDS} s") from error
+        except requests.exceptions.SSLError as error:
+            raise JiraSslError(urlsplit(url).netloc) from error
         except requests.ConnectionError as error:
             raise JiraConnectionError(urlsplit(url).netloc) from error
         except requests.RequestException as error:
-            raise JiraConnectionError(type(error).__name__) from error
+            raise JiraRequestError(type(error).__name__) from error
+        log_request("GET", url, response.status_code)
+        return response
 
 
 def _raise_for_status(response: requests.Response) -> None:

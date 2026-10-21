@@ -102,6 +102,7 @@ If a value is missing and there is no terminal to ask in (for example in a scrip
 - A dot (`·`) in the timeline means the ticket did not exist yet.
 - Hours are rounded to 0.1. The *Total* row in the hours table adds up the rounded cells, so it can differ by 0.1 from the *Time per status* table.
 - Statuses are listed in the order they first appear, which usually follows your workflow.
+- You can save the report to a file, for example `jira-activity report ... > report.txt`. Redirected output is always written as UTF-8. Errors and the progress spinner go to stderr, so they never end up in the file.
 
 ## Privacy and security
 
@@ -128,15 +129,21 @@ If a value is missing and there is no terminal to ask in (for example in a scrip
 | JA-103 | Jira resource not found (HTTP 404). | Check the site URL. |
 | JA-104 | Rate limit still exceeded after 3 retries (HTTP 429). | Wait a few minutes and try again. |
 | JA-105 | Jira server error (HTTP 5xx). | Try again later. |
-| JA-106 | Could not connect to the Jira site. | Check the URL, your network, VPN and proxy. |
+| JA-106 | Could not connect to the Jira site. | Check the URL and your network connection. |
 | JA-107 | The request timed out after 30 seconds. | Try again, or use a shorter period or `--project`. |
 | JA-108 | Jira answered in an unexpected format. | Check that the site is a Jira Cloud site. |
 | JA-109 | Jira rejected the request (HTTP 400). | Usually an unknown `--project`. Jira's own message is shown. |
 | JA-110 | Jira answered with an unexpected HTTP status. | Try again. Use `--verbose` to see the status code. |
+| JA-111 | The site's SSL certificate could not be verified. | Check your VPN or company proxy. Proxies that inspect traffic need their certificate trusted by Python. |
+| JA-112 | The request could not be completed, for example because of too many redirects. | Check that the site URL points directly to your Jira Cloud site. |
 | JA-201 | Invalid date range. | Use `YYYY-MM-DD`, and make sure `--from` is not after `--to`. |
 | JA-202 | Invalid Jira site URL. | Use the form `https://<your-site>.atlassian.net`. |
 | JA-301 | The OS keychain could not be read or written. | Check that your OS keychain is available and unlocked. |
 | JA-302 | No Jira credentials found. | Pass the options, set the environment variables, or run `configure`. |
+| JA-303 | A credential was left empty at the prompt. | Run again and type the value, or pass it as an option. |
+| JA-304 | The OS keychain backend failed unexpectedly. | Restart your session or keychain service, or use the environment variables instead. |
+| JA-305 | Input ended before an answer was given (Ctrl+Z / Ctrl+D). | Run again and answer the prompt. |
+| JA-401 | The report could not be written to the output. | The pipe or file closed early. Check the command you piped the output into. |
 | JA-999 | Unexpected error. | Please report it, with the error name shown. |
 
 ## Known limits
@@ -153,8 +160,8 @@ The code is split into layers so that all I/O lives in one place:
 src/jira_activity/
   cli.py          commands, options, and turning errors into exit codes
   errors.py       one error class per failure, each with a unique JA code
-  domain/         pure logic with no I/O: models, timeline, aggregation
-  adapters/       all I/O: Jira HTTP client, keychain and prompts, terminal output
+  domain/         pure logic with no I/O: models, timeline, aggregation, report
+  adapters/       all I/O: Jira HTTP client, keychain and prompts, terminal output, clock
   utils/logger.py the only logging setup
 tests/            unit tests, one file per module
 ```

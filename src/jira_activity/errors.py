@@ -68,6 +68,16 @@ class JiraUnexpectedStatusError(JiraActivityError):
     message = "Jira answered with an unexpected HTTP status code."
 
 
+class JiraSslError(JiraActivityError):
+    code = "JA-111"
+    message = "The Jira site's SSL certificate could not be verified. Check your VPN or company proxy."
+
+
+class JiraRequestError(JiraActivityError):
+    code = "JA-112"
+    message = "The request to Jira could not be completed (for example too many redirects)."
+
+
 # --- Input errors (JA-2xx) ---
 
 class InvalidDateRangeError(JiraActivityError):
@@ -90,3 +100,25 @@ class CredentialStoreError(JiraActivityError):
 class MissingCredentialsError(JiraActivityError):
     code = "JA-302"
     message = "No Jira credentials found. Pass them as options, set env vars or run `jira-activity configure`."
+
+
+class EmptyCredentialError(JiraActivityError):
+    code = "JA-303"
+    message = "A required Jira credential was left empty at the prompt."
+
+
+class CredentialStoreBackendError(JiraActivityError):
+    code = "JA-304"
+    message = "The OS keychain backend failed unexpectedly."
+
+
+class PromptAbortedError(JiraActivityError):
+    code = "JA-305"
+    message = "Input ended before an answer was given (Ctrl+Z / Ctrl+D)."
+
+
+# --- Output errors (JA-4xx) ---
+
+class OutputWriteError(JiraActivityError):
+    code = "JA-401"
+    message = "The report could not be written to the output (closed pipe or unsupported characters)."

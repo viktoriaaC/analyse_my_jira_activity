@@ -1,23 +1,24 @@
 """Command line interface: parses options, connects the layers and turns errors into exit codes.
 
+This module does no I/O itself: terminal output goes through adapters.terminal,
+the clock through adapters.clock and Jira through adapters.jira_client.
+
 Exit codes: 0 = success, 1 = error shown as [JA-xxx], 2 = wrong usage, 130 = cancelled.
 """
 
 from collections.abc import Callable
-from datetime import datetime, timezone, tzinfo
 from typing import Annotated, Optional
 
 import typer
-from rich.console import Console
-from rich.text import Text
 
+from jira_activity.adapters.clock import local_timezone, now_utc
 from jira_activity.adapters.credentials import configure as configure_credentials
 from jira_activity.adapters.credentials import resolve_credentials
 from jira_activity.adapters.jira_client import JiraClient, build_jql
-from jira_activity.adapters.renderer import render_report
-from jira_activity.domain.aggregate import IntervalsByIssue
-from jira_activity.domain.models import DateRange, Issue, parse_day
-from jira_activity.domain.timeline import build_intervals, clip
+from jira_activity.adapters.terminal import print_error, print_message, print_report, progress
+from jira_activity.domain.models import DateRange, Issue, StatusChange, parse_day
+from jira_activity.domain.report import build_report
+from jira_activity.domain.timeline import intervals_in_range
 from jira_activity.errors import JiraActivityError
 from jira_activity.utils.logger import configure_logging
 
@@ -98,37 +99,30 @@ def run_report(
     date_range = DateRange.from_dates(parse_day(from_date), parse_day(to_date), local_timezone())
     credentials = resolve_credentials(site, email, token)
     client = JiraClient(credentials.site, credentials.email, credentials.token)
-    issues, intervals_by_issue = fetch_intervals(client, date_range, project, Console(stderr=True))
-    render_report(Console(), issues, intervals_by_issue, date_range)
+    with progress("Searching for your tickets...") as show_progress:
+        issues = client.search_issues(build_jql(date_range, project))
+        changes_by_key = fetch_status_changes_by_key(client, issues, show_progress)
+    intervals_by_issue = intervals_in_range(issues, changes_by_key, date_range, now_utc())
+    print_report(build_report(issues, intervals_by_issue, date_range))
 
 
 def run_configure(site: str, email: str) -> None:
     """Ask for the token, save if the user agrees and say what happened."""
     saved = configure_credentials(site, email)
-    Console().print("Saved in the OS keychain." if saved else "Nothing was saved.")
+    print_message("Saved in the OS keychain." if saved else "Nothing was saved.")
 
 
-def fetch_intervals(
+def fetch_status_changes_by_key(
     client: JiraClient,
-    date_range: DateRange,
-    project: str | None,
-    status_console: Console,
-) -> tuple[list[Issue], IntervalsByIssue]:
-    """Fetch the user's tickets and turn each one's changelog into status intervals inside the range."""
-    now = datetime.now(timezone.utc)
-    with status_console.status("Searching for your tickets...") as status:
-        issues = client.search_issues(build_jql(date_range, project))
-        intervals_by_issue = {}
-        for number, issue in enumerate(issues, start=1):
-            status.update(f"Reading history of {issue.key} ({number}/{len(issues)})...")
-            changes = client.fetch_status_changes(issue.key)
-            intervals_by_issue[issue.key] = clip(build_intervals(issue, changes, now), date_range)
-    return issues, intervals_by_issue
-
-
-def local_timezone() -> tzinfo:
-    """The timezone of this computer, used to decide where days start and end."""
-    return datetime.now().astimezone().tzinfo
+    issues: list[Issue],
+    show_progress: Callable[[str], None],
+) -> dict[str, list[StatusChange]]:
+    """Read each issue's status changes from Jira, reporting progress as it goes."""
+    changes_by_key = {}
+    for number, issue in enumerate(issues, start=1):
+        show_progress(f"Reading history of {issue.key} ({number}/{len(issues)})...")
+        changes_by_key[issue.key] = client.fetch_status_changes(issue.key)
+    return changes_by_key
 
 
 def run_safely(action: Callable[[], None]) -> None:
@@ -144,6 +138,6 @@ def run_safely(action: Callable[[], None]) -> None:
 
 
 def exit_with_error(message: str, exit_code: int) -> None:
-    """Print the message in red on stderr and stop with the exit code."""
-    Console(stderr=True).print(Text(message, style="bold red"))
+    """Show the message on stderr and stop with the exit code."""
+    print_error(message)
     raise typer.Exit(exit_code)

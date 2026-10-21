@@ -1,5 +1,15 @@
 from helpers import at, change, date_range, interval, issue
-from jira_activity.domain.timeline import build_intervals, clip, status_at
+from jira_activity.domain.timeline import build_intervals, clip, intervals_in_range, status_at
+
+
+def test_intervals_in_range_builds_and_clips_every_issue():
+    issues = [issue(at(1), status="To Do", key="ABC-1"), issue(at(1), status="Done", key="ABC-2")]
+    changes_by_key = {"ABC-2": [change(at(3), "To Do", "Done")]}
+    result = intervals_in_range(issues, changes_by_key, date_range(at(2), at(4)), now=at(9))
+    assert result == {
+        "ABC-1": [interval("To Do", at(2), at(4))],
+        "ABC-2": [interval("To Do", at(2), at(3)), interval("Done", at(3), at(4))],
+    }
 
 
 def test_status_at_returns_status_covering_moment():

@@ -10,13 +10,21 @@ import os
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 import keyring
 from keyring.errors import KeyringError
 
 from jira_activity.adapters.jira_client import validate_site_url
-from jira_activity.errors import CredentialStoreError, MissingCredentialsError
+from jira_activity.errors import (
+    CredentialStoreBackendError,
+    CredentialStoreError,
+    EmptyCredentialError,
+    MissingCredentialsError,
+    PromptAbortedError,
+)
+
+T = TypeVar("T")
 
 KEYRING_SERVICE = "jira-activity"
 SITE_KEY = "site"
@@ -55,20 +63,20 @@ class KeyringStore:
     """Reads and writes values in the OS keychain."""
 
     def get(self, name: str) -> str | None:
-        try:
-            return keyring.get_password(KEYRING_SERVICE, name)
-        except KeyringError as error:
-            raise CredentialStoreError(f"reading '{name}': {type(error).__name__}") from error
-        except Exception as error:
-            raise CredentialStoreError(f"reading '{name}': unexpected {type(error).__name__}") from error
+        return _call_keyring(f"reading '{name}'", lambda: keyring.get_password(KEYRING_SERVICE, name))
 
     def set(self, name: str, value: str) -> None:
-        try:
-            keyring.set_password(KEYRING_SERVICE, name, value)
-        except KeyringError as error:
-            raise CredentialStoreError(f"saving '{name}': {type(error).__name__}") from error
-        except Exception as error:
-            raise CredentialStoreError(f"saving '{name}': unexpected {type(error).__name__}") from error
+        _call_keyring(f"saving '{name}'", lambda: keyring.set_password(KEYRING_SERVICE, name, value))
+
+
+def _call_keyring(action: str, call: Callable[[], T]) -> T:
+    """Run one keyring call and turn its failures into tool errors. Values never appear in the error."""
+    try:
+        return call()
+    except KeyringError as error:
+        raise CredentialStoreError(f"{action}: {type(error).__name__}") from error
+    except Exception as error:
+        raise CredentialStoreBackendError(f"{action}: {type(error).__name__}") from error
 
 
 class ConsolePrompter:
@@ -79,10 +87,18 @@ class ConsolePrompter:
 
     def ask(self, label: str, secret: bool = False) -> str:
         prompt = f"{label}: "
-        return (getpass.getpass(prompt) if secret else input(prompt)).strip()
+        return _read_input(lambda: getpass.getpass(prompt) if secret else input(prompt)).strip()
 
     def confirm(self, question: str) -> bool:
-        return input(f"{question} [y/N]: ").strip().lower() in ("y", "yes")
+        return _read_input(lambda: input(f"{question} [y/N]: ")).strip().lower() in ("y", "yes")
+
+
+def _read_input(read: Callable[[], str]) -> str:
+    """Read one answer, raising a tool error if the input ends (Ctrl+Z / Ctrl+D)."""
+    try:
+        return read()
+    except EOFError as error:
+        raise PromptAbortedError() from error
 
 
 def token_key(email: str) -> str:
@@ -134,7 +150,7 @@ def ask_required(label: str, prompter: Prompter, secret: bool = False) -> str:
         raise MissingCredentialsError(f"{label} not given and no terminal to ask in")
     answer = prompter.ask(label, secret=secret)
     if not answer:
-        raise MissingCredentialsError(f"{label} was left empty")
+        raise EmptyCredentialError(label)
     return answer
 
 
