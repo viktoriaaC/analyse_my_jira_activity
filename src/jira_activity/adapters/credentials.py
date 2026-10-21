@@ -158,7 +158,7 @@ def ask_required(label: str, prompter: Prompter, secret: bool = False) -> str:
     return answer
 
 
-def configure(
+def ask_and_save_credentials(
     site: str,
     email: str,
     store: CredentialStore | None = None,

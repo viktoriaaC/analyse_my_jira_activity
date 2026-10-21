@@ -5,7 +5,7 @@ from jira_activity.domain.aggregate import (
     hours_per_ticket_status,
     status_order,
     tickets_per_status,
-    time_per_status,
+    hours_per_status,
 )
 from jira_activity.domain.timeline import build_intervals, clip
 
@@ -59,12 +59,12 @@ def test_tickets_without_intervals_are_left_out():
     assert hours_per_ticket_status({"ABC-1": []}) == {}
 
 
-def test_time_per_status_totals_all_tickets():
+def test_hours_per_status_totals_all_tickets():
     intervals_by_issue = {
         "ABC-1": [interval("To Do", at(1, 0), at(1, 2))],
         "ABC-2": [interval("To Do", at(1, 0), at(1, 3)), interval("Done", at(1, 3), at(1, 4))],
     }
-    assert time_per_status(intervals_by_issue) == {"To Do": 5.0, "Done": 1.0}
+    assert hours_per_status(intervals_by_issue) == {"To Do": 5.0, "Done": 1.0}
 
 
 def test_tickets_per_status_lists_each_ticket_once_sorted():

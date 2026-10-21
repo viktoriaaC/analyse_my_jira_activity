@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from typing import TextIO
 
 from rich.console import Console
+from rich.status import Status
 from rich.text import Text
 
 from jira_activity.adapters.renderer import render_report
@@ -64,18 +65,43 @@ def print_message(message: str) -> None:
 
 def print_error(message: str) -> None:
     """Print an error message in red on stderr."""
-    try:
-        error_console().print(Text(message, style="bold red"))
-    except (OSError, UnicodeEncodeError):
-        # stderr itself is gone, so there is nowhere left to report this. The exit code still signals failure.
-        pass
+    # If stderr itself is gone there is nowhere left to report it; the exit code still signals failure.
+    _write_quietly(lambda: error_console().print(Text(message, style="bold red")))
 
 
 @contextmanager
 def progress(message: str) -> Iterator[Callable[[str], None]]:
-    """Show a spinner with the message on stderr while the block runs. Yields a function that changes the text."""
-    with error_console().status(message) as status:
-        yield status.update
+    """Show a spinner with the message on stderr while the block runs. Yields a function that changes the text.
+
+    Progress is only nice to have: if stderr cannot be written (closed pipe, encoding),
+    the spinner is dropped and the work carries on. Errors from the block itself are not touched.
+    """
+    status = _start_status(message)
+
+    def update(text: str) -> None:
+        if status is not None:
+            _write_quietly(lambda: status.update(text))
+
+    try:
+        yield update
+    finally:
+        if status is not None:
+            _write_quietly(status.stop)
+
+
+def _start_status(message: str) -> Status | None:
+    """Start a spinner on stderr, or return None if stderr cannot be written."""
+    status = error_console().status(message)
+    return status if _write_quietly(status.start) else None
+
+
+def _write_quietly(write: Callable[[], None]) -> bool:
+    """Run a write to stderr that may fail without harm. Returns False if it failed."""
+    try:
+        write()
+    except (OSError, UnicodeEncodeError):
+        return False
+    return True
 
 
 def _write_safely(write: Callable[[], None]) -> None:

@@ -7,13 +7,13 @@ Exit codes: 0 = success, 1 = error shown as [JA-xxx], 2 = wrong usage, 130 = can
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Annotated, Optional
 
 import typer
 
 from jira_activity.adapters.clock import local_timezone, now_utc
-from jira_activity.adapters.credentials import configure as configure_credentials
-from jira_activity.adapters.credentials import resolve_credentials
+from jira_activity.adapters.credentials import ask_and_save_credentials, resolve_credentials
 from jira_activity.adapters.jira_client import JiraClient, build_jql
 from jira_activity.adapters.terminal import print_error, print_message, print_report, progress
 from jira_activity.domain.models import DateRange, Issue, StatusChange, parse_day
@@ -73,7 +73,16 @@ def report(
     verbose: Annotated[bool, typer.Option("--verbose", help="Log each Jira request (method, path, status) to stderr.")] = False,
 ) -> None:
     """Show the statuses of your tickets during a period: summary, timeline and hours per status."""
-    run_safely(lambda: run_report(from_date, to_date, site, email, token, project, verbose))
+    options = ReportOptions(
+        from_date=from_date,
+        to_date=to_date,
+        site=site,
+        email=email,
+        token=token,
+        project=project,
+        verbose=verbose,
+    )
+    run_safely(run_report, options)
 
 
 @app.command(epilog=CONFIGURE_EPILOG)
@@ -82,34 +91,59 @@ def configure(
     email: Annotated[str, typer.Option(help="Email of your Atlassian account.")],
 ) -> None:
     """Save your Jira site, email and API token in the OS keychain, if you confirm."""
-    run_safely(lambda: run_configure(site, email))
+    run_safely(run_configure, site, email)
 
 
-def run_report(
-    from_date: str,
-    to_date: str,
-    site: str | None,
-    email: str | None,
-    token: str | None,
-    project: str | None,
-    verbose: bool,
-) -> None:
-    """Fetch the data for the period and print the report."""
-    configure_logging(verbose)
-    date_range = DateRange.from_dates(parse_day(from_date), parse_day(to_date), local_timezone())
-    credentials = resolve_credentials(site, email, token)
-    client = JiraClient(credentials.site, credentials.email, credentials.token)
-    with progress("Searching for your tickets...") as show_progress:
-        issues = client.search_issues(build_jql(date_range, project))
-        changes_by_key = fetch_status_changes_by_key(client, issues, show_progress)
+@dataclass(frozen=True)
+class ReportOptions:
+    """The options of `report`, by name, so values of the same type cannot be swapped by position."""
+
+    from_date: str
+    to_date: str
+    site: str | None
+    email: str | None
+    token: str | None = field(repr=False)
+    project: str | None
+    verbose: bool
+
+
+def run_report(options: ReportOptions) -> None:
+    """Run the report command: prepare, fetch from Jira, then print."""
+    configure_logging(options.verbose)
+    date_range = parse_period(options.from_date, options.to_date)
+    client = connect_to_jira(options)
+    issues, changes_by_key = fetch_jira_data(client, date_range, options.project)
     intervals_by_issue = intervals_in_range(issues, changes_by_key, date_range, now_utc())
     print_report(build_report(issues, intervals_by_issue, date_range))
 
 
 def run_configure(site: str, email: str) -> None:
     """Ask for the token, save if the user agrees and say what happened."""
-    saved = configure_credentials(site, email)
+    saved = ask_and_save_credentials(site, email)
     print_message("Saved in the OS keychain." if saved else "Nothing was saved.")
+
+
+def parse_period(from_date: str, to_date: str) -> DateRange:
+    """Turn the --from and --to options into a date range in this computer's timezone."""
+    return DateRange.from_dates(parse_day(from_date), parse_day(to_date), local_timezone())
+
+
+def connect_to_jira(options: ReportOptions) -> JiraClient:
+    """Find the credentials and create a Jira client with them."""
+    credentials = resolve_credentials(options.site, options.email, options.token)
+    return JiraClient(credentials.site, credentials.email, credentials.token)
+
+
+def fetch_jira_data(
+    client: JiraClient,
+    date_range: DateRange,
+    project: str | None,
+) -> tuple[list[Issue], dict[str, list[StatusChange]]]:
+    """Fetch the user's tickets in the range and each ticket's status changes, showing progress."""
+    with progress("Searching for your tickets...") as show_progress:
+        issues = client.search_issues(build_jql(date_range, project))
+        changes_by_key = fetch_status_changes_by_key(client, issues, show_progress)
+    return issues, changes_by_key
 
 
 def fetch_status_changes_by_key(
@@ -125,10 +159,10 @@ def fetch_status_changes_by_key(
     return changes_by_key
 
 
-def run_safely(action: Callable[[], None]) -> None:
-    """Run a command and turn every error into a message on stderr and an exit code."""
+def run_safely(action: Callable[..., None], *args: object) -> None:
+    """Run action(*args) and turn every error into a message on stderr and an exit code."""
     try:
-        action()
+        action(*args)
     except JiraActivityError as error:
         exit_with_error(str(error), EXIT_ERROR)
     except KeyboardInterrupt:

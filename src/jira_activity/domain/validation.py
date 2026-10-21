@@ -44,17 +44,18 @@ def _site_problem(parts: SplitResult) -> str | None:
         return "must not contain a username or password"
     if not parts.hostname or not JIRA_CLOUD_HOST.match(parts.hostname):
         return "must be a <your-site>.atlassian.net address"
-    if _port(parts) not in (None, HTTPS_PORT):
+    if _has_custom_port(parts):
         return "must not use a custom port"
     return None
 
 
-def _port(parts: SplitResult) -> int | None:
-    """Return the port in the URL, or -1 if it is not a valid number."""
+def _has_custom_port(parts: SplitResult) -> bool:
+    """Return True if the URL names a port other than 443, or a port that is not a valid number."""
     try:
-        return parts.port
+        port = parts.port
     except ValueError:
-        return -1
+        return True
+    return port not in (None, HTTPS_PORT)
 
 
 def _redacted(parts: SplitResult) -> str:

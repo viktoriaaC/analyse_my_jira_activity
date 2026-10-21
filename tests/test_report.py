@@ -20,7 +20,7 @@ def test_build_report_collects_every_section():
     assert report.hours_by_ticket == {"ABC-1": {"To Do": 24.0, "Done": 24.0}, "ABC-2": {"To Do": 12.0}}
     assert report.hours_by_status == {"To Do": 36.0, "Done": 24.0}
     assert report.tickets_by_status == {"To Do": ["ABC-1", "ABC-2"], "Done": ["ABC-1"]}
-    assert report.matrix_status_totals == {"To Do": 36.0, "Done": 24.0}
+    assert report.rounded_column_totals == {"To Do": 36.0, "Done": 24.0}
     assert report.date_range == PERIOD
 
 

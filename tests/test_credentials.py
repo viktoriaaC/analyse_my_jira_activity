@@ -7,7 +7,7 @@ from jira_activity.adapters.credentials import (
     ConsolePrompter,
     Credentials,
     KeyringStore,
-    configure,
+    ask_and_save_credentials,
     resolve_credentials,
     token_key,
 )
@@ -163,7 +163,7 @@ def test_token_is_hidden_in_repr():
 def test_configure_saves_only_after_yes():
     store = FakeStore()
     prompter = FakePrompter(answers=["new-token"], confirm=True)
-    assert configure(SITE + "/", EMAIL, store=store, prompter=prompter) is True
+    assert ask_and_save_credentials(SITE + "/", EMAIL, store=store, prompter=prompter) is True
     assert store.values == {"site": SITE, "email": EMAIL, token_key(EMAIL): "new-token"}
     assert prompter.asked == [("Jira API token", True)]
     assert prompter.confirm_asked == ["Save site, email and token in the OS keychain?"]
@@ -171,14 +171,14 @@ def test_configure_saves_only_after_yes():
 
 def test_configure_saves_nothing_after_no():
     store = FakeStore()
-    assert configure(SITE, EMAIL, store=store, prompter=FakePrompter(answers=["t"], confirm=False)) is False
+    assert ask_and_save_credentials(SITE, EMAIL, store=store, prompter=FakePrompter(answers=["t"], confirm=False)) is False
     assert store.values == {}
 
 
 def test_configure_rejects_bad_site_before_asking_for_token():
     prompter = FakePrompter(answers=["t"], confirm=True)
     with pytest.raises(Exception) as error:
-        configure("http://acme.atlassian.net", EMAIL, store=FakeStore(), prompter=prompter)
+        ask_and_save_credentials("http://acme.atlassian.net", EMAIL, store=FakeStore(), prompter=prompter)
     assert error.value.code == "JA-202"
     assert prompter.asked == []
 
@@ -186,14 +186,14 @@ def test_configure_rejects_bad_site_before_asking_for_token():
 def test_configure_rejects_bad_email_before_asking_for_token():
     prompter = FakePrompter(answers=["t"], confirm=True)
     with pytest.raises(Exception) as error:
-        configure(SITE, "me@", store=FakeStore(), prompter=prompter)
+        ask_and_save_credentials(SITE, "me@", store=FakeStore(), prompter=prompter)
     assert error.value.code == "JA-203"
     assert prompter.asked == []
 
 
 def test_configure_without_terminal_raises():
     with pytest.raises(Exception) as error:
-        configure(SITE, EMAIL, store=FakeStore(), prompter=FakePrompter(interactive=False))
+        ask_and_save_credentials(SITE, EMAIL, store=FakeStore(), prompter=FakePrompter(interactive=False))
     assert error.value.code == "JA-302"
 
 
