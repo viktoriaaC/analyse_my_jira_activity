@@ -62,6 +62,38 @@ def test_closed_pipe_raises_instead_of_silently_exiting():
         terminal.SafeConsole(file=BrokenStream()).print("x")
 
 
+class BrokenTerminal(io.StringIO):
+    """A stderr that looks like a terminal (so rich draws a spinner) but whose pipe is closed."""
+
+    def write(self, text):
+        raise BrokenPipeError()
+
+    def isatty(self):
+        return True
+
+
+def test_progress_with_broken_stderr_lets_the_work_continue(monkeypatch):
+    monkeypatch.setattr(sys, "stderr", BrokenTerminal())
+    done = []
+    with terminal.progress("Searching...") as update:
+        update("step 1")
+        done.append("work")
+    assert done == ["work"]
+
+
+def test_progress_does_not_hide_errors_from_the_work(monkeypatch):
+    monkeypatch.setattr(sys, "stderr", BrokenTerminal())
+    with pytest.raises(ValueError, match="from the work"):
+        with terminal.progress("Searching..."):
+            raise ValueError("from the work")
+
+
+def test_progress_updates_text_on_a_working_stderr(monkeypatch):
+    monkeypatch.setattr(sys, "stderr", io.StringIO())
+    with terminal.progress("Searching...") as update:
+        update("Reading history of ABC-1 (1/1)...")
+
+
 def test_print_message_failure_becomes_ja_401(monkeypatch):
     class BrokenStdout(io.StringIO):
         def write(self, text):

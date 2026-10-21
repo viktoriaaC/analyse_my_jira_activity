@@ -24,7 +24,7 @@ def hours_per_ticket_status(intervals_by_issue: IntervalsByIssue) -> dict[str, d
     }
 
 
-def time_per_status(intervals_by_issue: IntervalsByIssue) -> dict[str, float]:
+def hours_per_status(intervals_by_issue: IntervalsByIssue) -> dict[str, float]:
     """Return total hours spent in each status, over all tickets."""
     all_intervals = [interval for intervals in intervals_by_issue.values() for interval in intervals]
     return _sum_hours_by_status(all_intervals)

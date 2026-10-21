@@ -110,6 +110,22 @@ def test_report_requires_from_and_to():
     assert result.exit_code == 2
 
 
+def test_report_options_hide_the_token_in_repr():
+    options = cli.ReportOptions(
+        from_date="2026-10-01", to_date="2026-10-04", site=None, email=None,
+        token="secret-token", project=None, verbose=False,
+    )
+    assert "secret-token" not in repr(options)
+
+
+def test_report_options_reach_jira_by_name():
+    run("report", *PERIOD_OPTIONS, "--site", "https://acme.atlassian.net", "--email", "me@acme.se",
+        "--token", "the-token", "--project", "WEB")
+    client = FakeClient.instances[0]
+    assert (client.site, client.email, client.token) == ("https://acme.atlassian.net", "me@acme.se", "the-token")
+    assert 'project = "WEB"' in client.jql
+
+
 # --- errors ---
 
 @pytest.mark.parametrize(
@@ -189,7 +205,7 @@ def test_ctrl_c_exits_130():
 @pytest.mark.parametrize("saved, message", [(True, "Saved in the OS keychain."), (False, "Nothing was saved.")])
 def test_configure_reports_whether_it_saved(monkeypatch, saved, message):
     calls = []
-    monkeypatch.setattr(cli, "configure_credentials", lambda site, email: calls.append((site, email)) or saved)
+    monkeypatch.setattr(cli, "ask_and_save_credentials", lambda site, email: calls.append((site, email)) or saved)
     result = run("configure", "--site", "https://acme.atlassian.net", "--email", "me@acme.se")
     assert result.exit_code == 0
     assert message in result.stdout

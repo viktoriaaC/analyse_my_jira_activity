@@ -247,6 +247,40 @@ def test_rate_limit_gives_up_after_max_retries():
     assert len(sleeps) == 3
 
 
+@pytest.mark.parametrize("header", ["NaN", "nan", "inf", "-inf", "Infinity"])
+def test_non_finite_retry_after_falls_back_to_backoff(header):
+    ok = FakeResponse(body={"issues": [], "isLast": True})
+    client, _, sleeps = make_client(FakeResponse(429, headers={"Retry-After": header}), ok)
+    assert client.search_issues("jql") == []
+    assert sleeps == [1.0]
+
+
+@pytest.mark.parametrize(
+    "header, retries_used, expected",
+    [("NaN", 0, 1.0), ("inf", 2, 4.0), ("5", 0, 5.0), ("-3", 0, 0.0), ("soon", 1, 2.0), (None, 0, 1.0)],
+)
+def test_retry_delay_is_always_a_finite_number_time_sleep_accepts(header, retries_used, expected):
+    """The original bug: "NaN" passed float() and time.sleep(nan) raised ValueError, shown only as JA-999."""
+    headers = {} if header is None else {"Retry-After": header}
+    assert jira_client._retry_delay(FakeResponse(429, headers=headers), retries_used) == expected
+
+
+@pytest.mark.parametrize(
+    "page, values, items_read, expected",
+    [
+        ({"isLast": False}, [], 0, True),
+        ({"isLast": True}, [1], 1, True),
+        ({"isLast": False, "total": 1}, [1], 1, False),
+        ({"total": 2}, [1, 2], 2, True),
+        ({"total": 5}, [1, 2], 2, False),
+        ({}, [1], 1, True),
+    ],
+    ids=["empty-page", "isLast-true", "isLast-wins-over-total", "total-reached", "total-not-reached", "no-hints"],
+)
+def test_is_last_changelog_page(page, values, items_read, expected):
+    assert jira_client._is_last_changelog_page(page, values, items_read) is expected
+
+
 def test_retry_after_is_capped():
     ok = FakeResponse(body={"issues": [], "isLast": True})
     client, _, sleeps = make_client(FakeResponse(429, headers={"Retry-After": "3600"}), ok)

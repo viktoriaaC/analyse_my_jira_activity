@@ -1,8 +1,10 @@
 """All HTTP communication with the Jira Cloud REST API (v3)."""
 
+import math
 import time
 from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
+from typing import Any
 from urllib.parse import quote, urlsplit
 
 import requests
@@ -119,7 +121,7 @@ class JiraClient:
             values = _required(page, "values")
             yield from values
             start_at += len(values)
-            if not values or page.get("isLast", start_at >= page.get("total", 0)):
+            if _is_last_changelog_page(page, values, start_at):
                 return
         raise JiraTooManyPagesError(f"history of {key} stopped after {MAX_PAGES} pages")
 
@@ -130,16 +132,17 @@ class JiraClient:
         return _parse_json(response)
 
     def _send_with_retries(self, url: str, params: dict) -> requests.Response:
-        """Send the request, waiting and retrying while Jira answers 429 (rate limited)."""
-        for attempt in range(MAX_RETRIES):
+        """Send the request, and while Jira answers 429 (rate limited) wait and try again.
+
+        That is one first try plus at most MAX_RETRIES retries, with a wait before each retry.
+        """
+        for retries_used in range(MAX_RETRIES + 1):
             response = self._send(url, params)
             if response.status_code != 429:
                 return response
-            self._sleep(_retry_delay(response, attempt))
-        response = self._send(url, params)
-        if response.status_code == 429:
-            raise JiraRateLimitError(f"gave up after {MAX_RETRIES} retries")
-        return response
+            if retries_used < MAX_RETRIES:
+                self._sleep(_retry_delay(response, retries_used))
+        raise JiraRateLimitError(f"gave up after {MAX_RETRIES} retries")
 
     def _send(self, url: str, params: dict) -> requests.Response:
         """Send one GET request, log it, and turn network failures into tool errors."""
@@ -181,13 +184,33 @@ def _jira_error_messages(response: requests.Response) -> str | None:
     return "; ".join(str(message) for message in messages) or None
 
 
-def _retry_delay(response: requests.Response, attempt: int) -> float:
-    """Return seconds to wait before retrying: Retry-After if given, else exponential backoff."""
+def _retry_delay(response: requests.Response, retries_used: int) -> float:
+    """Return seconds to wait before retrying: Retry-After if it is a usable number, else exponential backoff.
+
+    float() also accepts "nan" and "inf", which time.sleep cannot use, so only finite values count.
+    """
+    backoff = 2.0 ** retries_used
     try:
         delay = float(response.headers.get("Retry-After", ""))
     except ValueError:
-        delay = 2.0 ** attempt
+        delay = backoff
+    if not math.isfinite(delay):
+        delay = backoff
     return min(max(delay, 0.0), MAX_RETRY_DELAY_SECONDS)
+
+
+def _is_last_changelog_page(page: dict, values: list, items_read: int) -> bool:
+    """Return True when there are no more changelog pages to read. Jira signals this in one of three ways:
+
+    1. the page is empty, or
+    2. the page says "isLast": true, or
+    3. "isLast" is missing and everything up to "total" has been read.
+    """
+    if not values:
+        return True
+    if "isLast" in page:
+        return bool(page["isLast"])
+    return items_read >= page.get("total", 0)
 
 
 def _parse_json(response: requests.Response) -> dict:
@@ -201,8 +224,8 @@ def _parse_json(response: requests.Response) -> dict:
     return body
 
 
-def _required(data: dict, key: str):
-    """Return data[key], or raise if Jira left it out."""
+def _required(data: dict, key: str) -> Any:
+    """Return data[key], or raise if Jira left it out. The value can be any JSON type."""
     try:
         return data[key]
     except (KeyError, TypeError) as error:

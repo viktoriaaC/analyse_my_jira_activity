@@ -90,6 +90,7 @@ def render_tickets_per_status(console: Console, report: Report, colors: dict[str
     table.add_column("Hours", justify="right")
     for status in report.statuses:
         for index, key in enumerate(report.tickets_by_status[status]):
+            # Show the status name only on the first row of its group, so the groups read as blocks.
             label = Text(status, style=colors[status]) if index == 0 else ""
             hours = format_hours(report.hours_by_ticket[key][status])
             table.add_row(label, Text(key), Text(summaries[key]), hours)
@@ -100,7 +101,7 @@ def render_tickets_per_status(console: Console, report: Report, colors: dict[str
 
 def render_hours_matrix(console: Console, report: Report) -> None:
     """Print hours per ticket and status, with a total per ticket and per status."""
-    totals = report.matrix_status_totals
+    totals = report.rounded_column_totals
     table = Table(title="Hours per status", show_footer=True)
     table.add_column("Ticket", footer="Total", no_wrap=True)
     table.add_column("Summary", max_width=SUMMARY_MAX_WIDTH, overflow="ellipsis", no_wrap=True)
