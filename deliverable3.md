@@ -1,4 +1,5 @@
 Steg 3 – Diligence: Utvärdera och dokumentera
+----------------------------------------------------------------------------------
 Jag gav den kontextet av ett exempel som jag själv kört, ett test jag körde i venv där jag lade in flera versioner av samma input options, i detta fallet flera --from och flera --to.
 Detta bör inte ske då det är missvissande att ta in och tillåta flera versioner av samma input variabel, som i detta fall är 2 datum som ska utgöra ett intervall.
 Jag frågade den varför den koden valde den specifika --from variabeln som den valde och vad som skulle kunna göras för det.
