@@ -126,6 +126,34 @@ def test_report_options_reach_jira_by_name():
     assert 'project = "WEB"' in client.jql
 
 
+
+@pytest.mark.parametrize(
+    "repeated",
+    [
+        ["--from", "2026-09-01"],
+        ["--to", "2026-10-05"],
+        ["--site", "https://other.atlassian.net"],
+        ["--email", "other@acme.se"],
+        ["--token", "other-token"],
+        ["--project", "WEB", "--project", "APP"],
+        ["--verbose", "--verbose"],
+    ],
+    ids=lambda repeated: repeated[0],
+)
+def test_report_rejects_an_option_given_twice(repeated):
+    result = run("report", *PERIOD_OPTIONS, *CREDENTIAL_OPTIONS, *repeated)
+    assert result.exit_code == 2
+    assert repeated[0] in result.output
+    assert "given more than once" in result.output
+    assert FakeClient.instances == []
+
+
+def test_report_rejects_a_repeated_option_written_with_equals():
+    result = run("report", "--from=2026-10-01", "--from", "2026-09-01", "--to", "2026-10-04", *CREDENTIAL_OPTIONS)
+    assert result.exit_code == 2
+    assert "given more than once" in result.output
+
+
 # --- errors ---
 
 @pytest.mark.parametrize(
@@ -210,6 +238,18 @@ def test_configure_reports_whether_it_saved(monkeypatch, saved, message):
     assert result.exit_code == 0
     assert message in result.stdout
     assert calls == [("https://acme.atlassian.net", "me@acme.se")]
+
+
+@pytest.mark.parametrize(
+    "repeated", [["--site", "https://other.atlassian.net"], ["--email", "other@acme.se"]], ids=lambda r: r[0]
+)
+def test_configure_rejects_an_option_given_twice(monkeypatch, repeated):
+    calls = []
+    monkeypatch.setattr(cli, "ask_and_save_credentials", lambda site, email: calls.append((site, email)))
+    result = run("configure", "--site", "https://acme.atlassian.net", "--email", "me@acme.se", *repeated)
+    assert result.exit_code == 2
+    assert repeated[0] in result.output
+    assert calls == []
 
 
 def test_configure_requires_site_and_email():

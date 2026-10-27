@@ -65,6 +65,8 @@ Shows the four sections listed above for the period.
 | `--project KEY` | no | Only include tickets in this project, for example `WEB`. |
 | `--verbose` | no | Log each Jira request (method, path and status code) to stderr. |
 
+Each option can be given only once. Repeating one, for example `--from` twice, stops with exit code 2 instead of silently using the last value.
+
 Examples:
 
 ```
@@ -118,7 +120,7 @@ If a value is missing and there is no terminal to ask in (for example in a scrip
 |---|---|
 | 0 | Success |
 | 1 | An error was shown as `[JA-xxx]` (see below) |
-| 2 | Wrong command usage, for example a missing `--from` |
+| 2 | Wrong command usage, for example a missing `--from`, or an option given more than once |
 | 130 | Cancelled with Ctrl+C |
 
 ## Error codes

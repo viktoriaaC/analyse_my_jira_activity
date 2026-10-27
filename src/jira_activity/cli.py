@@ -3,14 +3,17 @@
 This module does no I/O itself: terminal output goes through adapters.terminal,
 the clock through adapters.clock and Jira through adapters.jira_client.
 
-Exit codes: 0 = success, 1 = error shown as [JA-xxx], 2 = wrong usage, 130 = cancelled.
+Exit codes: 0 = success, 1 = error shown as [JA-xxx], 2 = wrong usage (also: an option given twice),
+130 = cancelled.
 """
 
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Annotated, Optional
 
 import typer
+from typer.core import TyperCommand
 
 from jira_activity.adapters.clock import local_timezone, now_utc
 from jira_activity.adapters.credentials import ask_and_save_credentials, resolve_credentials
@@ -59,7 +62,19 @@ Nothing is saved unless you answer yes, and nothing is written to a plain file.
 app = typer.Typer(help=APP_HELP, no_args_is_help=True, add_completion=False)
 
 
-@app.command(epilog=REPORT_EPILOG)
+class SingleUseOptionsCommand(TyperCommand):
+    """A command where each option may be given at most once, instead of the last value silently winning."""
+
+    def parse_args(self, ctx: typer.Context, args: list[str]) -> list[str]:
+        """Stop with a usage error (exit 2) if an option is repeated, then parse as usual."""
+        _, _, given_order = self.make_parser(ctx).parse_args(args=list(args))
+        for param, times in Counter(given_order).items():
+            if times > 1:
+                raise typer.BadParameter("given more than once.", ctx=ctx, param=param)
+        return super().parse_args(ctx, args)
+
+
+@app.command(cls=SingleUseOptionsCommand, epilog=REPORT_EPILOG)
 def report(
     from_date: Annotated[str, typer.Option("--from", help="First day of the period, YYYY-MM-DD.")],
     to_date: Annotated[str, typer.Option("--to", help="Last day of the period (included), YYYY-MM-DD.")],
@@ -85,7 +100,7 @@ def report(
     run_safely(run_report, options)
 
 
-@app.command(epilog=CONFIGURE_EPILOG)
+@app.command(cls=SingleUseOptionsCommand, epilog=CONFIGURE_EPILOG)
 def configure(
     site: Annotated[str, typer.Option(help="Jira site, e.g. https://acme.atlassian.net.")],
     email: Annotated[str, typer.Option(help="Email of your Atlassian account.")],
