@@ -64,6 +64,7 @@ Shows the four sections listed above for the period.
 | `--token TOKEN` | no | Jira API token. Prefer the environment variable or the keychain, because options end up in shell history. |
 | `--project KEY` | no | Only include tickets in this project, for example `WEB`. |
 | `--verbose` | no | Log each Jira request (method, path and status code) to stderr. |
+| `--work-hours` | no | Count only hours Monday to Friday, 08:00–17:00, in your computer's timezone. See [Reading the report](#reading-the-report). |
 
 Each option can be given only once. Repeating one, for example `--from` twice, stops with exit code 2 instead of silently using the last value.
 
@@ -72,6 +73,7 @@ Examples:
 ```
 jira-activity report --from 2026-09-01 --to 2026-09-30
 jira-activity report --from 2026-09-01 --to 2026-09-07 --project WEB --verbose
+jira-activity report --from 2026-09-01 --to 2026-09-30 --work-hours
 ```
 
 ### `jira-activity configure`
@@ -98,7 +100,8 @@ If a value is missing and there is no terminal to ask in (for example in a scrip
 
 ## Reading the report
 
-- **Hours are calendar hours**, not working hours. A ticket left in *In Progress* over a weekend counts 48 hours for that weekend.
+- **Hours are calendar hours** by default. A ticket left in *In Progress* over a weekend counts 48 hours for that weekend.
+- **With `--work-hours`, the hours tables count only Monday to Friday, 08:00–17:00**, so a full working day is 9 hours (lunch is included) and that weekend counts 0. Public holidays are not known, so they count as normal working days. A ticket or status with no time in work hours is still listed, with `0.0` hours. The timeline still shows the whole period.
 - **Days start and end in your computer's timezone.** If the period crosses a daylight-saving change, the hours near that change can be off by one.
 - **The timeline is approximate.** Each character covers a slice of the period and is coloured by the status in the middle of that slice. A status shorter than one slice may not show in the bar. The hours tables are always exact.
 - A dot (`·`) in the timeline means the ticket did not exist yet.

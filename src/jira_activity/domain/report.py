@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 
 from jira_activity.domain.aggregate import (
+    HoursMeasure,
     IntervalsByIssue,
+    calendar_hours,
     hours_per_ticket_status,
     status_order,
     hours_per_status,
@@ -30,22 +32,35 @@ class Report:
     # Sum of the already rounded cells in each status column of the hours table. Can differ
     # from hours_by_status by a few tenths, but makes the table add up on screen.
     rounded_column_totals: dict[str, float]
+    # True when the hours count work hours only. The timeline always shows the whole period.
+    work_hours_only: bool
 
 
-def build_report(issues: list[Issue], intervals_by_issue: IntervalsByIssue, date_range: DateRange) -> Report:
-    """Compute the report for the issues that have any time inside the range."""
+def build_report(
+    issues: list[Issue],
+    intervals_by_issue: IntervalsByIssue,
+    date_range: DateRange,
+    work_hours_measure: HoursMeasure | None = None,
+) -> Report:
+    """Compute the report for the issues that have any time inside the range.
+
+    With a work_hours_measure, the hours count only work hours. Tickets and statuses stay listed
+    even if they got no work hours, showing 0.0, because they were still in that status.
+    """
+    measure = work_hours_measure or calendar_hours
     shown = [issue for issue in issues if intervals_by_issue.get(issue.key)]
     statuses = status_order(intervals_by_issue)
-    hours_by_ticket = hours_per_ticket_status(intervals_by_issue)
+    hours_by_ticket = hours_per_ticket_status(intervals_by_issue, measure)
     return Report(
         date_range=date_range,
         issues=shown,
         intervals_by_issue=intervals_by_issue,
         statuses=statuses,
         hours_by_ticket=hours_by_ticket,
-        hours_by_status=hours_per_status(intervals_by_issue),
+        hours_by_status=hours_per_status(intervals_by_issue, measure),
         tickets_by_status=tickets_per_status(intervals_by_issue),
         rounded_column_totals=sum_columns(hours_by_ticket, statuses),
+        work_hours_only=work_hours_measure is not None,
     )
 
 

@@ -49,6 +49,19 @@ def test_title_shows_period_and_ticket_count():
     assert "2 ticket(s)" in text
 
 
+def test_title_says_hours_are_calendar_hours_by_default():
+    assert "Hours are calendar hours." in report_text()
+
+
+def test_work_hours_report_says_so_and_keeps_the_whole_timeline():
+    console = recording_console()
+    render_report(console, build_report(ISSUES, INTERVALS, PERIOD, lambda _: 1.0))
+    text = console.export_text()
+    assert "Hours are work hours (Mon–Fri 08:00–17:00)." in text
+    assert "calendar hours" not in text
+    assert BAR * 10 in line_with(text, "ABC-1", BAR)
+
+
 def test_report_contains_all_four_sections():
     text = report_text()
     for title in ["Time per status", "Status timeline", "Tickets per status", "Hours per status"]:
