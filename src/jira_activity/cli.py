@@ -10,18 +10,21 @@ Exit codes: 0 = success, 1 = error shown as [JA-xxx], 2 = wrong usage (also: an 
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Annotated, Optional
 
 import typer
 from typer.core import TyperCommand
 
-from jira_activity.adapters.clock import local_timezone, now_utc
+from jira_activity.adapters.clock import local_timezone, now_utc, to_local_time
 from jira_activity.adapters.credentials import ask_and_save_credentials, resolve_credentials
 from jira_activity.adapters.jira_client import JiraClient, build_jql
 from jira_activity.adapters.terminal import print_error, print_message, print_report, progress
+from jira_activity.domain.aggregate import HoursMeasure
 from jira_activity.domain.models import DateRange, Issue, StatusChange, parse_day
 from jira_activity.domain.report import build_report
 from jira_activity.domain.timeline import intervals_in_range
+from jira_activity.domain.work_hours import work_hours_in
 from jira_activity.errors import JiraActivityError
 from jira_activity.utils.logger import configure_logging
 
@@ -52,6 +55,8 @@ Examples:
   jira-activity report --from 2026-09-01 --to 2026-09-30
 
   jira-activity report --from 2026-09-01 --to 2026-09-07 --project WEB --verbose
+
+  jira-activity report --from 2026-09-01 --to 2026-09-30 --work-hours
 """
 
 CONFIGURE_EPILOG = """
@@ -86,6 +91,10 @@ def report(
     ] = None,
     project: Annotated[Optional[str], typer.Option(help="Only include tickets in this project, e.g. WEB.")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", help="Log each Jira request (method, path, status) to stderr.")] = False,
+    work_hours: Annotated[
+        bool,
+        typer.Option("--work-hours", help="Count only hours Monday to Friday, 08:00-17:00, in this computer's timezone."),
+    ] = False,
 ) -> None:
     """Show the statuses of your tickets during a period: summary, timeline and hours per status."""
     options = ReportOptions(
@@ -96,6 +105,7 @@ def report(
         token=token,
         project=project,
         verbose=verbose,
+        work_hours=work_hours,
     )
     run_safely(run_report, options)
 
@@ -120,6 +130,7 @@ class ReportOptions:
     token: str | None = field(repr=False)
     project: str | None
     verbose: bool
+    work_hours: bool
 
 
 def run_report(options: ReportOptions) -> None:
@@ -129,7 +140,12 @@ def run_report(options: ReportOptions) -> None:
     client = connect_to_jira(options)
     issues, changes_by_key = fetch_jira_data(client, date_range, options.project)
     intervals_by_issue = intervals_in_range(issues, changes_by_key, date_range, now_utc())
-    print_report(build_report(issues, intervals_by_issue, date_range))
+    print_report(build_report(issues, intervals_by_issue, date_range, work_hours_measure(options.work_hours)))
+
+
+def work_hours_measure(work_hours: bool) -> HoursMeasure | None:
+    """Return how to measure work hours in this computer's timezone, or None to count all hours."""
+    return partial(work_hours_in, to_local=to_local_time) if work_hours else None
 
 
 def run_configure(site: str, email: str) -> None:

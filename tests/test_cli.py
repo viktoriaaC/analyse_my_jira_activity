@@ -1,3 +1,5 @@
+from datetime import timezone
+
 import keyring
 import pytest
 from typer.testing import CliRunner
@@ -60,7 +62,7 @@ def test_help_explains_getting_started():
 def test_report_help_lists_every_option():
     result = run("report", "--help")
     assert result.exit_code == 0
-    for option in ["--from", "--to", "--site", "--email", "--token", "--project", "--verbose"]:
+    for option in ["--from", "--to", "--site", "--email", "--token", "--project", "--verbose", "--work-hours"]:
         assert option in result.stdout
     assert "install-completion" not in result.stdout
 
@@ -113,7 +115,7 @@ def test_report_requires_from_and_to():
 def test_report_options_hide_the_token_in_repr():
     options = cli.ReportOptions(
         from_date="2026-10-01", to_date="2026-10-04", site=None, email=None,
-        token="secret-token", project=None, verbose=False,
+        token="secret-token", project=None, verbose=False, work_hours=False,
     )
     assert "secret-token" not in repr(options)
 
@@ -126,6 +128,27 @@ def test_report_options_reach_jira_by_name():
     assert 'project = "WEB"' in client.jql
 
 
+@pytest.fixture
+def utc_computer(monkeypatch):
+    monkeypatch.setattr(cli, "local_timezone", lambda: timezone.utc)
+    monkeypatch.setattr(cli, "to_local_time", lambda moment: moment.astimezone(timezone.utc))
+
+
+def test_work_hours_counts_only_work_hours(utc_computer):
+    # To Do all of Thursday 1 Oct, Done from Friday 2 Oct through the weekend.
+    result = run("report", *PERIOD_OPTIONS, *CREDENTIAL_OPTIONS, "--work-hours")
+    assert result.exit_code == 0, result.stderr
+    assert "Hours are work hours" in result.stdout
+    assert "9.0" in result.stdout
+    assert "24.0" not in result.stdout
+
+
+def test_report_counts_calendar_hours_without_work_hours(utc_computer):
+    result = run("report", *PERIOD_OPTIONS, *CREDENTIAL_OPTIONS)
+    assert result.exit_code == 0, result.stderr
+    assert "Hours are calendar hours." in result.stdout
+    assert "24.0" in result.stdout
+
 
 @pytest.mark.parametrize(
     "repeated",
@@ -137,6 +160,7 @@ def test_report_options_reach_jira_by_name():
         ["--token", "other-token"],
         ["--project", "WEB", "--project", "APP"],
         ["--verbose", "--verbose"],
+        ["--work-hours", "--work-hours"],
     ],
     ids=lambda repeated: repeated[0],
 )

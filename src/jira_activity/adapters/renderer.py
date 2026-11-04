@@ -13,6 +13,7 @@ from rich.text import Text
 from jira_activity.domain.models import DateRange, StatusInterval
 from jira_activity.domain.report import Report
 from jira_activity.domain.timeline import status_at
+from jira_activity.domain.work_hours import WORK_HOURS_LABEL
 
 STATUS_COLORS = [
     "blue", "yellow", "green", "magenta", "cyan", "red",
@@ -47,7 +48,14 @@ def render_title(console: Console, report: Report) -> None:
     """Print the report heading with the period and number of tickets."""
     first, last = period_labels(report.date_range)
     console.print(Text(f"Jira activity {first} – {last}", style="bold"))
-    console.print(f"{len(report.issues)} ticket(s) assigned to you in the period. Hours are calendar hours.\n")
+    console.print(f"{len(report.issues)} ticket(s) assigned to you in the period. {hours_note(report)}\n")
+
+
+def hours_note(report: Report) -> str:
+    """Say which hours the tables count."""
+    if report.work_hours_only:
+        return f"Hours are work hours ({WORK_HOURS_LABEL}). The timeline still shows the whole period."
+    return "Hours are calendar hours."
 
 
 def render_summary(console: Console, report: Report, colors: dict[str, str]) -> None:

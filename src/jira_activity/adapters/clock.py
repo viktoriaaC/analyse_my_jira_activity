@@ -11,3 +11,8 @@ def now_utc() -> datetime:
 def local_timezone() -> tzinfo:
     """The timezone of this computer, used to decide where days start and end."""
     return datetime.now().astimezone().tzinfo
+
+
+def to_local_time(moment: datetime) -> datetime:
+    """Convert to this computer's local time, using the UTC offset in effect at that moment."""
+    return moment.astimezone()
